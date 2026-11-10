@@ -68,3 +68,15 @@ export function formatCompetence(c: Competence): string {
   )
   return `${name} de ${y}`
 }
+
+/** "há 5 min", "há 3 h", "há 2 dias" (para a última leitura do Gmail). */
+export function timeAgo(iso: string, now: Date = new Date()): string {
+  const minutes = Math.max(0, Math.round((now.getTime() - Date.parse(iso)) / 60_000))
+  if (Number.isNaN(minutes)) return ''
+  if (minutes < 1) return 'agora mesmo'
+  if (minutes < 60) return `há ${minutes} min`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `há ${hours} h`
+  const days = Math.round(hours / 24)
+  return days === 1 ? 'há 1 dia' : `há ${days} dias`
+}

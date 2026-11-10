@@ -38,6 +38,7 @@ const hooks = vi.hoisted(() => ({
   useBills: vi.fn(),
   useEntries: vi.fn(),
   useToday: vi.fn(),
+  useSuggestions: vi.fn(),
 }))
 const store = vi.hoisted(() => ({
   ensureEntries: vi.fn(),
@@ -56,6 +57,7 @@ import Home from './Home'
 
 beforeEach(() => {
   hooks.useToday.mockReturnValue(TODAY)
+  hooks.useSuggestions.mockReturnValue({ data: [], ready: true, error: null })
   hooks.useBills.mockReturnValue({ data: [bill()], ready: true, error: null })
   hooks.useEntries.mockReturnValue({ data: entries, ready: true, error: null })
   store.ensureEntries.mockResolvedValue(0)

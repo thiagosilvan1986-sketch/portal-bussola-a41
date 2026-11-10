@@ -23,9 +23,10 @@ export default defineConfig({
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      // /__/ é o caminho reservado do Firebase Auth; o service worker não pode interceptá-lo
-      workbox: { navigateFallback: '/index.html', navigateFallbackDenylist: [/^\/__\//] },
+      // /__/ é do Firebase Auth e /.netlify/ são as funções do servidor (inclusive o retorno do login do Google):
+      // o service worker não pode servir o index.html no lugar deles.
+      workbox: { navigateFallback: '/index.html', navigateFallbackDenylist: [/^\/__\//, /^\/\.netlify\//] },
     }),
   ],
-  test: { include: ['src/**/*.test.{ts,tsx}'] },
+  test: { include: ['src/**/*.test.{ts,tsx}', 'netlify/**/*.test.ts'] },
 })

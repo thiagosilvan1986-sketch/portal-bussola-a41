@@ -8,6 +8,12 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
+    // Acesso ao Gmail (token guardado pelo servidor): o navegador nunca lê nem grava aqui.
+    // Só as funções do Netlify, com a conta de serviço do Firebase, chegam a esta coleção.
+    match /integrations/{uid} {
+      allow read, write: if false;
+    }
+
     // Todo o resto é bloqueado.
     match /{document=**} {
       allow read, write: if false;
