@@ -25,6 +25,8 @@ export const isFirebaseConfigured = Boolean(
 const app = isFirebaseConfigured ? initializeApp(config) : null
 
 export const auth = app ? getAuth(app) : null
+// E-mails do Firebase (redefinição de senha) saem em português.
+if (auth) auth.languageCode = 'pt-BR'
 
 // Cache local persistente: o app abre e mostra os dados mesmo sem internet.
 export const db = app

@@ -511,7 +511,14 @@ a:focus-visible {
   background: #03080a;
   color: #e8eef5;
   --muted: #9aa7bd;
-  --border: #1f2a33;
+  --border: #26343f;
+  --text: #e8eef5;
+  --bg: #0a141a;
+  --card: #0f1c24;
+  --ok-bg: #12351f;
+  --ok-text: #86efac;
+  --danger-bg: #3b1212;
+  --danger: #fca5a5;
 }
 .login-brand {
   display: flex;
@@ -550,4 +557,67 @@ a:focus-visible {
   display: block;
   height: 44px;
   width: auto;
+}
+
+/* ---- Login por e-mail ---- */
+.login-wide {
+  width: 100%;
+  max-width: 360px;
+}
+.login-or {
+  width: 100%;
+  max-width: 360px;
+  margin: 6px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.login-or::before,
+.login-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.login-form {
+  width: 100%;
+  max-width: 360px;
+  text-align: left;
+}
+.login-form .btn {
+  width: 100%;
+}
+label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+label.check input {
+  width: auto;
+  min-height: 0;
+  accent-color: var(--primary);
+}
+.login-links {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.login-screen .link-btn {
+  color: #93b4ff;
+  min-height: 36px;
+}
+.notice {
+  margin: 0;
+  max-width: 360px;
+  background: var(--ok-bg);
+  color: var(--ok-text);
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+.login-screen .error {
+  max-width: 360px;
 }
