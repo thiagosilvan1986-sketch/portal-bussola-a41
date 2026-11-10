@@ -1,0 +1,27 @@
+# Configuração lida na raiz do repositório: o app fica na subpasta app-financas.
+# (Mantém uma cópia completa em app-financas/netlify.toml caso o "Base directory"
+# seja definido pela interface do Netlify.)
+[build]
+  base = "app-financas"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "DENY"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
