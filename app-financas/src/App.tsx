@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth'
+import { AppHeader } from './components/AppHeader'
 import { BottomNav } from './components/BottomNav'
 import { isFirebaseConfigured } from './firebase'
 import BillForm from './pages/BillForm'
@@ -15,6 +16,7 @@ function Gate() {
   if (!user) return <Login />
   return (
     <>
+      <AppHeader />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/contas" element={<Bills />} />

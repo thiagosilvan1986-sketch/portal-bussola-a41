@@ -505,10 +505,50 @@ a:focus-visible {
 }
 
 /* ---- Logo ---- */
+.login-screen {
+  min-height: 100vh;
+  width: 100%;
+  background: #03080a;
+  color: #e8eef5;
+  --muted: #9aa7bd;
+  --border: #1f2a33;
+}
+.login-brand {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin: 0;
+}
 .logo {
   display: block;
-  width: min(100%, 320px);
+  width: 260px;
+  max-width: 100%;
   height: auto;
+  margin-inline: auto;
   border-radius: 28px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #03080a;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: env(safe-area-inset-top);
+}
+.app-header-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+}
+.brand-link {
+  display: inline-flex;
+  border-radius: 8px;
+}
+.brand {
+  display: block;
+  height: 36px;
+  width: auto;
 }
