@@ -55,3 +55,9 @@ Valores monetários são guardados em **centavos (inteiro)**. Datas em `AAAA-MM-
 - No iPhone, o login com Google por pop-up pode falhar quando o app está instalado na tela inicial. Entrando pelo Safari funciona.
 - Anexos (boleto em PDF, comprovante) ainda não existem: o Cloud Storage do Firebase também pede o plano Blaze. Por enquanto, guarde a linha digitável no campo de texto.
 - Lembretes por notificação e e-mail diário dependem de Cloud Functions (Fase 2).
+
+## Publicação
+
+- Site: https://appfinancasbr.netlify.app (Netlify, com Base directory `app-financas`; cada push na `main` publica sozinho).
+- Firebase: projeto `financas-e0917`. As variáveis `VITE_FIREBASE_*` ficam no Netlify (Project configuration > Environment variables).
+- A chave `apiKey` do app Web não é segredo (só identifica o projeto; a proteção está nas regras do Firestore). Por isso o Netlify é avisado para não tratá-la como segredo na leitura do build (`SECRETS_SCAN_SMART_DETECTION_OMIT_VALUES`).
