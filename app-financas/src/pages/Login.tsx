@@ -50,7 +50,7 @@ export default function Login() {
     <div className="login-screen">
       <main className="center">
         <h1 className="login-brand">
-          <img className="logo" src="/logo.webp" alt="Contas em Dia" width="1040" height="899" />
+          <img className="logo" src="/logo-login.webp" alt="Contas em Dia" width="1040" height="1084" />
         </h1>
         <p className="muted">Veja o que falta pagar neste mês e nunca mais esqueça um vencimento.</p>
 

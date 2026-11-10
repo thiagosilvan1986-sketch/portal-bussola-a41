@@ -523,13 +523,14 @@ a:focus-visible {
 .login-brand {
   display: flex;
   justify-content: center;
-  width: 100%;
-  margin: 0;
+  /* a arte já tem margem própria; deixa ocupar quase toda a largura do celular */
+  width: calc(100% + 32px);
+  margin: 0 -16px;
 }
 .logo {
   display: block;
-  width: 260px;
-  max-width: 100%;
+  width: 100%;
+  max-width: 460px;
   height: auto;
   margin-inline: auto;
 }

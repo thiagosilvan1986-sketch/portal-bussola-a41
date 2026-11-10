@@ -37,7 +37,7 @@ describe('Entrada', () => {
   it('mostra o logo com o nome do app e o botão de entrar com Google', () => {
     render(<Login />)
     expect(screen.getByRole('heading', { level: 1, name: 'Contas em Dia' })).toBeTruthy()
-    expect(screen.getByAltText('Contas em Dia').getAttribute('src')).toBe('/logo.webp')
+    expect(screen.getByAltText('Contas em Dia').getAttribute('src')).toBe('/logo-login.webp')
     fireEvent.click(screen.getByRole('button', { name: 'Entrar com Google' }))
     expect(auth.signIn).toHaveBeenCalledOnce()
   })
