@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Cada pessoa lê e grava somente em users/{seu uid}/...
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Todo o resto é bloqueado.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
