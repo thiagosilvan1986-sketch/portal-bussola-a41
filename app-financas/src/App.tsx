@@ -8,7 +8,6 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import SetupNeeded from './pages/SetupNeeded'
 import Settings from './pages/Settings'
-import Suggestions from './pages/Suggestions'
 
 function Gate() {
   const { user, loading } = useAuth()
@@ -21,7 +20,6 @@ function Gate() {
         <Route path="/contas" element={<Bills />} />
         <Route path="/contas/nova" element={<BillForm />} />
         <Route path="/contas/:id" element={<BillForm />} />
-        <Route path="/sugestoes" element={<Suggestions />} />
         <Route path="/ajustes" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

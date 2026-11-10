@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { EntrySheet } from '../components/EntrySheet'
 import { StatusChip } from '../components/StatusChip'
-import { useBills, useEntries, useSuggestions, useToday } from '../data/hooks'
+import { useBills, useEntries, useToday } from '../data/hooks'
 import { ensureEntries, payEntry } from '../data/store'
 import { addMonths, competenceOf, formatCompetence, formatDateBR } from '../domain/dates'
 import { amountDue, displayStatus, isPending, remainingCents, sortEntries, summarize } from '../domain/entries'
@@ -18,7 +18,6 @@ export default function Home() {
 
   const bills = useBills(uid)
   const entries = useEntries(uid, competence)
-  const suggestions = useSuggestions(uid)
 
   // Garante os lançamentos do mês atual, do próximo e do mês que está sendo visto (se for futuro).
   useEffect(() => {
@@ -64,13 +63,6 @@ export default function Home() {
         <p className="banner banner-danger" role="status">
           {summary.overdueCount === 1 ? '1 conta atrasada' : `${summary.overdueCount} contas atrasadas`}. Confira a lista abaixo.
         </p>
-      )}
-      {suggestions.data.length > 0 && (
-        <Link className="banner banner-info" to="/sugestoes">
-          {suggestions.data.length === 1
-            ? '1 sugestão do seu e-mail espera por você'
-            : `${suggestions.data.length} sugestões do seu e-mail esperam por você`}
-        </Link>
       )}
       {dueToday.length > 0 && (
         <p className="banner banner-warn" role="status">

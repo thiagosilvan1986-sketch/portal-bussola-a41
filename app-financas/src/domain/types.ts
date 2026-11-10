@@ -22,8 +22,6 @@ export interface Bill {
   paymentMethod: PaymentMethod
   notes: string
   active: boolean
-  /** Remetentes de e-mail já confirmados para esta conta (domínio, ou endereço quando é e-mail pessoal). */
-  emailSenders?: string[]
 }
 
 /** Lançamento do mês (a ocorrência). O id é `${billId}_${competence}`. */
