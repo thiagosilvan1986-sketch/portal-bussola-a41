@@ -4,6 +4,7 @@ import { PrivacyProvider } from './data/privacy'
 import { AppHeader } from './components/AppHeader'
 import { isFirebaseConfigured } from './firebase'
 import About from './pages/About'
+import AlertSettings from './pages/AlertSettings'
 import BillForm from './pages/BillForm'
 import Bills from './pages/Bills'
 import Cadastros from './pages/Cadastros'
@@ -41,6 +42,7 @@ export function AppRoutes() {
       <Route path="/cadastros/atalhos/novo" element={<ShortcutForm />} />
       <Route path="/cadastros/atalhos/:id" element={<ShortcutForm />} />
       <Route path="/cadastros/fornecedores" element={<Suppliers />} />
+      <Route path="/cadastros/alertas" element={<AlertSettings />} />
       <Route path="/cadastros/planilhas" element={<DataTransfer />} />
       <Route path="/sobre" element={<About />} />
       {/* Endereços da época em que o menu se chamava Ajustes. */}

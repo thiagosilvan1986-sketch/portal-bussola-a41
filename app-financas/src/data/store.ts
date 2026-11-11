@@ -15,6 +15,7 @@ import {
   type Unsubscribe,
   type WriteBatch,
 } from 'firebase/firestore'
+import { normalizeAlerts, type AlertSettings } from '../domain/alerts'
 import { backfillEntries, billAppliesTo, buildEntry, missingEntries } from '../domain/bills'
 import { competenceOf } from '../domain/dates'
 import { addCharge, removeCharge, withPayment } from '../domain/receivables'
@@ -35,6 +36,8 @@ const entriesCol = (uid: string) => collection(database(), 'users', uid, 'entrie
 const peopleCol = (uid: string) => collection(database(), 'users', uid, 'people')
 const receivablesCol = (uid: string) => collection(database(), 'users', uid, 'receivables')
 const registryDoc = (uid: string) => doc(database(), 'users', uid, 'settings', 'registry')
+const alertsDoc = (uid: string) => doc(database(), 'users', uid, 'settings', 'alerts')
+const devicesCol = (uid: string) => collection(database(), 'users', uid, 'pushSubscriptions')
 
 function withoutId<T extends { id: string }>(value: T): Data<T> {
   const { id: _id, ...rest } = value
@@ -336,6 +339,50 @@ export function subscribeRegistry(
 /** Grava os cadastros inteiros. */
 export function saveRegistry(uid: string, registry: Registry): Promise<void> {
   return setDoc(registryDoc(uid), registry)
+}
+
+/** Avisos de vencimento: ligado ou não, quantos dias antes e a que horas. Sem documento, valem os padrões. */
+export function subscribeAlerts(
+  uid: string,
+  onData: (settings: AlertSettings) => void,
+  onError: (error: Error) => void,
+): Unsubscribe {
+  return onSnapshot(alertsDoc(uid), (snap) => onData(normalizeAlerts(snap.exists() ? snap.data() : undefined)), onError)
+}
+
+export function saveAlerts(uid: string, settings: AlertSettings): Promise<void> {
+  return setDoc(alertsDoc(uid), settings)
+}
+
+/** Um aparelho que recebe os avisos com o app fechado. O servidor lê estes documentos para enviar a notificação. */
+export interface PushDevice {
+  /** Resumo (SHA-256) do endereço do aparelho: o mesmo aparelho nunca vira dois cadastros. */
+  id: string
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+  /** Como a pessoa reconhece o aparelho, por exemplo "Android · Chrome". */
+  label: string
+  createdAt: string
+}
+
+export function subscribePushDevices(
+  uid: string,
+  onData: (devices: PushDevice[]) => void,
+  onError: (error: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    devicesCol(uid),
+    (snap) => onData(snap.docs.map((d) => ({ ...d.data(), id: d.id }) as PushDevice).sort((a, b) => a.createdAt.localeCompare(b.createdAt))),
+    onError,
+  )
+}
+
+export function savePushDevice(uid: string, device: PushDevice): Promise<void> {
+  return setDoc(doc(devicesCol(uid), device.id), withoutId(device))
+}
+
+export function deletePushDevice(uid: string, id: string): Promise<void> {
+  return deleteDoc(doc(devicesCol(uid), id))
 }
 
 /**

@@ -48,14 +48,29 @@ Valores monetários são guardados em **centavos (inteiro)**. Datas em `AAAA-MM-
 ## Estrutura
 
 - `src/domain`: regras puras e testadas (dinheiro, datas, recorrência, status, resumo). Não dependem do Firebase.
-- `src/data`: acesso ao Firestore e hooks.
+- `src/data`: acesso ao Firestore e hooks; `push.ts` cuida da permissão e da inscrição do aparelho.
+- `netlify/functions` e `netlify/lib`: o servidor dos avisos (usa as regras de `src/domain/alerts.ts`).
+- `public/push-handler.js`: mostra a notificação no aparelho (carregado pelo service worker).
 - `src/pages`, `src/components`: telas.
+
+## Avisos de vencimento (notificação no celular e no navegador)
+
+Em **Cadastros > Alertas de vencimento** a pessoa escolhe quantos dias antes avisar (no dia, 1, 2, 3, 5, 7, 10 ou 15; pode marcar vários), a que horas, e ativa cada aparelho. Dentro do app, a faixa “Vence amanhã” no Início segue as mesmas escolhas e não depende do servidor.
+
+Para a notificação chegar **com o app fechado**, o servidor precisa estar ligado. Ele roda no Netlify, sem o plano Blaze do Firebase:
+
+- `netlify/functions/send-alerts.mts` roda no começo de cada hora (UTC). Para quem já passou do horário escolhido e ainda não recebeu hoje, olha as contas que vencem nos prazos marcados e manda **uma** notificação com todas (só nomes e prazos, nunca valores, porque a tela bloqueada pode estar à vista).
+- `push-config.mts` entrega ao app a chave pública; `send-test.mts` atende o botão “Enviar aviso de teste”.
+- As chaves de assinatura (VAPID) nascem sozinhas na primeira chamada e ficam em `appConfig/vapid` no Firestore, que as regras fecham para o app (só o servidor lê).
+- Cada aparelho ativado vira um documento em `users/{uid}/pushSubscriptions/{id}`; as escolhas ficam em `users/{uid}/settings/alerts`; o último dia avisado, em `users/{uid}/settings/alertState`.
+
+**Única configuração manual:** no Netlify (Project configuration > Environment variables), criar `FIREBASE_SERVICE_ACCOUNT` com o conteúdo do JSON da conta de serviço (Firebase > Configurações do projeto > Contas de serviço > Gerar nova chave privada), marcada como **secret** e nunca colada no repositório nem em conversas. Depois, um novo deploy. Sem essa variável, a tela de Alertas avisa que o servidor ainda não foi ligado e o resto do app segue normal.
 
 ## Limitações conhecidas
 
 - No iPhone, o login com Google por pop-up pode falhar quando o app está instalado na tela inicial. Entrando pelo Safari funciona.
 - Anexos (boleto em PDF, comprovante) ainda não existem: o Cloud Storage do Firebase também pede o plano Blaze. Por enquanto, guarde a linha digitável no campo de texto.
-- Lembretes por notificação dependem de Cloud Functions (plano Blaze do Firebase).
+- Avisos de vencimento com o app fechado: no iPhone exigem iOS 16.4 ou mais novo e o app instalado na Tela de Início. A faixa “Vence amanhã” dentro do app funciona em qualquer aparelho.
 
 ## Publicação
 

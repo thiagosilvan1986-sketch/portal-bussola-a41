@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
+import { DEFAULT_ALERTS, type AlertSettings } from '../domain/alerts'
 import { todayInSaoPaulo } from '../domain/dates'
 import { defaultRegistry, type Registry } from '../domain/registry'
 import type { Bill, Competence, Entry, IsoDate, Person, Receivable } from '../domain/types'
 import {
+  subscribeAlerts,
   subscribeBills,
   subscribeEntries,
   subscribeEntriesRange,
   subscribePeople,
+  subscribePushDevices,
   subscribeReceivables,
   subscribeRegistry,
+  type PushDevice,
 } from './store'
 
 interface Live<T> {
@@ -101,6 +105,40 @@ export function useRegistry(uid: string): { data: Registry; ready: boolean; erro
   useEffect(
     () =>
       subscribeRegistry(
+        uid,
+        (data) => setState({ data, ready: true, error: null }),
+        (e) => setState((s) => ({ ...s, ready: true, error: e.message })),
+      ),
+    [uid],
+  )
+  return state
+}
+
+/** Avisos de vencimento da pessoa. Até carregar (ou sem nada gravado), valem os padrões. */
+export function useAlertSettings(uid: string): { data: AlertSettings; ready: boolean; error: string | null } {
+  const [state, setState] = useState<{ data: AlertSettings; ready: boolean; error: string | null }>(() => ({
+    data: { ...DEFAULT_ALERTS, days: [...DEFAULT_ALERTS.days] },
+    ready: false,
+    error: null,
+  }))
+  useEffect(
+    () =>
+      subscribeAlerts(
+        uid,
+        (data) => setState({ data, ready: true, error: null }),
+        (e) => setState((s) => ({ ...s, ready: true, error: e.message })),
+      ),
+    [uid],
+  )
+  return state
+}
+
+/** Aparelhos que recebem os avisos com o app fechado. */
+export function usePushDevices(uid: string): Live<PushDevice> {
+  const [state, setState] = useState<Live<PushDevice>>(INITIAL)
+  useEffect(
+    () =>
+      subscribePushDevices(
         uid,
         (data) => setState({ data, ready: true, error: null }),
         (e) => setState((s) => ({ ...s, ready: true, error: e.message })),

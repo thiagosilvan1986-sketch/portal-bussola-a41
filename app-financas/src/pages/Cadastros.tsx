@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { useRegistry } from '../data/hooks'
+import { useAlertSettings, useRegistry } from '../data/hooks'
+import { alertsSummary } from '../domain/alerts'
 
 function HubLink({ to, title, text }: { to: string; title: string; text: string }) {
   return (
@@ -22,6 +23,7 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
 export default function Cadastros() {
   const { user } = useAuth()
   const { data: reg } = useRegistry(user!.uid)
+  const { data: alerts } = useAlertSettings(user!.uid)
   return (
     <main className="page">
       <header className="page-head">
@@ -39,6 +41,7 @@ export default function Cadastros() {
           title="Fornecedores"
           text={reg.suppliers.length === 0 ? 'Cadastro opcional' : count(reg.suppliers.length, 'fornecedor', 'fornecedores')}
         />
+        <HubLink to="/cadastros/alertas" title="Alertas de vencimento" text={alertsSummary(alerts)} />
       </section>
 
       <section className="stack" aria-label="Dados e conta">

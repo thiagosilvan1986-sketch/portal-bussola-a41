@@ -758,6 +758,37 @@ label.check input {
   min-height: 0;
   accent-color: var(--primary);
 }
+/* Tela de Alertas: parágrafos sem a margem extra (o espaço vem do gap). */
+.settings-card p,
+.settings-card h2 {
+  margin: 0;
+}
+.settings-card {
+  gap: 16px;
+}
+.settings-card .settings-group {
+  gap: 10px;
+}
+.actions.actions-column {
+  flex-direction: column;
+  align-items: stretch;
+}
+.actions.actions-column > .btn {
+  flex: none;
+}
+.chips-days .chip-btn {
+  min-height: 44px;
+  padding: 0 16px;
+}
+label.check-strong {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+label.check-strong input {
+  width: 22px;
+  height: 22px;
+}
 .login-links {
   display: flex;
   flex-direction: column;

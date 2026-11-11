@@ -44,6 +44,9 @@ const hooks = vi.hoisted(() => ({
   useReceivables: vi.fn(),
   useRegistry: vi.fn(),
   useToday: vi.fn(),
+  useAlertSettings: vi.fn(() => ({ data: { enabled: true, days: [1], hour: 8 }, ready: true, error: null })),
+  usePushDevices: vi.fn(() => ({ data: [], ready: true, error: null })),
+  useEntriesRange: vi.fn(() => ({ data: [], ready: true, error: null })),
 }))
 const store = vi.hoisted(() => ({
   ensureEntries: vi.fn(),

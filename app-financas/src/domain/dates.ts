@@ -47,6 +47,17 @@ export function dueDateFor(c: Competence, dueDay: number): IsoDate {
   return `${c}-${String(day).padStart(2, '0')}`
 }
 
+/** Soma dias (pode ser negativo) a uma data AAAA-MM-DD. */
+export function addDays(date: IsoDate, n: number): IsoDate {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
+}
+
+/** Hora cheia (0 a 23) em São Paulo, independente do fuso do aparelho ou do servidor. */
+export function hourInSaoPaulo(now: Date = new Date()): number {
+  const hour = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }).format(now)
+  return Number(hour)
+}
+
 /** Dias de `from` até `to` (positivo se `to` é depois). */
 export function diffDays(from: IsoDate, to: IsoDate): number {
   const f = Date.parse(`${from}T00:00:00Z`)

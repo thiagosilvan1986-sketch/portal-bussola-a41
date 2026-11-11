@@ -25,11 +25,13 @@ const bill = (over: Partial<Bill> = {}): Bill => ({
 const hooks = vi.hoisted(() => ({
   useBills: vi.fn(),
   useEntries: vi.fn(),
-  useEntriesRange: vi.fn(),
+  useEntriesRange: vi.fn(() => ({ data: [], ready: true, error: null })),
   usePeople: vi.fn(),
   useReceivables: vi.fn(),
   useRegistry: vi.fn(),
   useToday: vi.fn(),
+  useAlertSettings: vi.fn(() => ({ data: { enabled: true, days: [1], hour: 8 }, ready: true, error: null })),
+  usePushDevices: vi.fn(() => ({ data: [], ready: true, error: null })),
 }))
 const store = vi.hoisted(() => ({
   saveRegistry: vi.fn(),

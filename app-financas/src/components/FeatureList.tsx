@@ -5,6 +5,11 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
     text: 'Cadastre uma vez. O app lança todo mês e destaca o que vence hoje e o que atrasou. Conta com fim, como financiamento ou consórcio? Informe as parcelas e o começo: o app mostra “Parcela 3 de 10” e para sozinho depois da última.',
   },
   {
+    icon: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm0-11v4l2.500 1.500M5 3 2 6m17-3 3 3',
+    title: 'Aviso antes de vencer',
+    text: 'Escolha com quantos dias de antecedência quer ser avisado (na véspera, 3 dias antes…) e a que horas. A notificação chega no celular e no navegador, mesmo com o app fechado, depois de ativar o aparelho em Cadastros.',
+  },
+  {
     icon: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm-4-9 3 3 5-6',
     title: 'Pago em um toque',
     text: 'Marque como paga com o ✓. Outro valor ou outra data? Também resolve.',

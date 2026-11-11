@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { DueSoonBanner } from '../components/DueSoonBanner'
 import { EntrySheet } from '../components/EntrySheet'
 import { Welcome } from '../components/Welcome'
 import { StatusChip } from '../components/StatusChip'
@@ -126,6 +127,7 @@ export default function Home() {
           Vence hoje: {dueToday.map((e) => e.billName).join(', ')}
         </p>
       )}
+      {competence === thisMonth && bills.ready && <DueSoonBanner uid={uid} today={today} bills={bills.data} />}
 
       <section className="summary" aria-label="Resumo do mês">
         <div className={`card summary-main tone-${mainTone.tone}`}>

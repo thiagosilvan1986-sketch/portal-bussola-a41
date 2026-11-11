@@ -6,6 +6,12 @@
   command = "npm run build"
   publish = "dist"
 
+# Funções do servidor (avisos de vencimento por notificação). O firebase-admin e o web-push vão como pacotes, sem empacotar junto (dependem de módulos do Node).
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  external_node_modules = ["firebase-admin", "web-push"]
+
 [build.environment]
   NODE_VERSION = "22"
 
@@ -23,5 +29,11 @@
 
 [[headers]]
   for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+# O service worker e o arquivo que ele carrega para mostrar as notificações nunca podem ficar em cache
+[[headers]]
+  for = "/push-handler.js"
   [headers.values]
     Cache-Control = "no-cache"

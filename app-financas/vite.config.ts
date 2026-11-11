@@ -23,9 +23,14 @@ export default defineConfig({
           { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      // /__/ é o caminho reservado do Firebase Auth; o service worker não pode interceptá-lo
-      workbox: { navigateFallback: '/index.html', navigateFallbackDenylist: [/^\/__\//] },
+      // /__/ é o caminho reservado do Firebase Auth e /.netlify/ são as funções do servidor: o service worker não pode interceptá-los.
+      // push-handler.js (em public/) mostra a notificação de vencimento que o servidor manda com o app fechado.
+      workbox: {
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/__\//, /^\/\.netlify\//],
+        importScripts: ['push-handler.js'],
+      },
     }),
   ],
-  test: { include: ['src/**/*.test.{ts,tsx}'] },
+  test: { include: ['src/**/*.test.{ts,tsx}', 'netlify/**/*.test.ts'] },
 })
