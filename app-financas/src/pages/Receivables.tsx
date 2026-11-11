@@ -1,20 +1,46 @@
 import { useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { usePeople, useReceivables, useToday } from '../data/hooks'
-import { formatDateBR } from '../domain/dates'
+import { formatCompetenceShort, formatDateBR } from '../domain/dates'
 import { formatBRL } from '../domain/money'
-import { summarizePerson } from '../domain/receivables'
+import {
+  KIND_INFO,
+  RECEIVABLE_KINDS,
+  forecastByMonth,
+  lastChargeText,
+  listPath,
+  ofKind,
+  summarizePerson,
+} from '../domain/receivables'
+import type { ReceivableKind } from '../domain/types'
+
+const emptyText: Record<ReceivableKind, { title: string; body: string }> = {
+  cartao: {
+    title: 'Nenhum reembolso do cartão',
+    body: 'Comprou ou parcelou algo no cartão para outra pessoa? Cadastre a compra, as parcelas e o contato. O app mostra quantas faltam, você dá baixa a cada pagamento e cobra com a mensagem pronta.',
+  },
+  servico: {
+    title: 'Nenhum serviço a receber',
+    body: 'Prestou um serviço e vai receber depois ou em parcelas? Cadastre aqui para acompanhar o que falta, dar baixa a cada pagamento e cobrar com a mensagem pronta.',
+  },
+}
 
 export default function Receivables() {
   const uid = useAuth().user!.uid
   const today = useToday()
+  const [params] = useSearchParams()
+  const kind: ReceivableKind = params.get('aba') === 'servicos' ? 'servico' : 'cartao'
   const people = usePeople(uid)
   const receivables = useReceivables(uid)
 
+  // Pessoas que têm compra deste tipo. Quem ainda não tem nenhuma compra fica na lista do cartão.
   const rows = useMemo(() => {
+    const anyPurchase = new Set(receivables.data.map((r) => r.personId))
+    const mine = ofKind(receivables.data, kind)
     return people.data
-      .map((p) => ({ person: p, summary: summarizePerson(receivables.data.filter((r) => r.personId === p.id), today) }))
+      .filter((p) => mine.some((r) => r.personId === p.id) || (kind === 'cartao' && !anyPurchase.has(p.id)))
+      .map((p) => ({ person: p, summary: summarizePerson(mine.filter((r) => r.personId === p.id), today) }))
       .sort(
         (a, b) =>
           Number(b.summary.overdueCount > 0) - Number(a.summary.overdueCount > 0) ||
@@ -22,19 +48,47 @@ export default function Receivables() {
           b.summary.remainingCents - a.summary.remainingCents ||
           a.person.name.localeCompare(b.person.name, 'pt-BR'),
       )
-  }, [people.data, receivables.data, today])
+  }, [people.data, receivables.data, kind, today])
 
-  const totals = useMemo(() => summarizePerson(receivables.data, today), [receivables.data, today])
+  const totals = useMemo(() => summarizePerson(ofKind(receivables.data, kind), today), [receivables.data, kind, today])
+  const forecast = useMemo(() => forecastByMonth(ofKind(receivables.data, kind), today), [receivables.data, kind, today])
+  const overdueByKind = useMemo(
+    () =>
+      Object.fromEntries(
+        RECEIVABLE_KINDS.map((k) => [k, summarizePerson(ofKind(receivables.data, k), today).overdueCount]),
+      ) as Record<ReceivableKind, number>,
+    [receivables.data, today],
+  )
   const ready = people.ready && receivables.ready
 
   return (
     <main className="page">
       <header className="page-head">
         <h1>A receber</h1>
-        <Link className="btn primary small" to="/receber/nova">
+        <Link className="btn primary small" to={kind === 'servico' ? '/receber/nova?tipo=servico' : '/receber/nova'}>
           Nova compra
         </Link>
       </header>
+
+      <nav className="tabs" aria-label="Tipo de valor a receber">
+        {RECEIVABLE_KINDS.map((k) => (
+          <Link
+            key={k}
+            aria-current={k === kind ? 'page' : undefined}
+            className={`tab ${k === kind ? 'active' : ''}`}
+            to={listPath(k)}
+            replace
+          >
+            {KIND_INFO[k].tab}
+            {overdueByKind[k] > 0 && (
+              <span className="tab-badge" aria-label={`${overdueByKind[k]} em atraso`}>
+                {overdueByKind[k]}
+              </span>
+            )}
+          </Link>
+        ))}
+      </nav>
+      <p className="muted small-note kind-hint">{KIND_INFO[kind].hint}</p>
 
       {(people.error || receivables.error) && (
         <p className="error" role="alert">
@@ -73,16 +127,18 @@ export default function Receivables() {
         </div>
       </section>
 
+      {ready && totals.remainingCents > 0 && <ForecastCard kind={kind} forecast={forecast} />}
+
       {!ready ? (
         <p className="muted center-text">Carregando…</p>
       ) : rows.length === 0 ? (
         <div className="empty card">
-          <h2>Ninguém te deve nada por aqui</h2>
+          <h2>{emptyText[kind].title}</h2>
+          <p className="muted">{emptyText[kind].body}</p>
           <p className="muted">
-            Comprou ou parcelou algo no cartão para outra pessoa? Cadastre a compra, as parcelas e o contato. O app
-            mostra quantas faltam, você dá baixa a cada pagamento e cobra com a mensagem pronta.
+            Já tem uma planilha? <Link to="/ajustes/planilhas">Importe um CSV</Link>.
           </p>
-          <Link className="btn primary" to="/receber/nova">
+          <Link className="btn primary" to={kind === 'servico' ? '/receber/nova?tipo=servico' : '/receber/nova'}>
             Nova compra
           </Link>
         </div>
@@ -112,6 +168,9 @@ export default function Receivables() {
                     </span>
                   )}
                   {done && <span className="chip chip-paga">Quitado</span>}
+                  {summary.remainingCents > 0 && lastChargeText(person.charges, today) && (
+                    <span className="muted small-note">{lastChargeText(person.charges, today)}</span>
+                  )}
                 </Link>
                 {summary.purchaseCount > 0 && (
                   <div className="row-side">
@@ -125,5 +184,66 @@ export default function Receivables() {
         </ul>
       )}
     </main>
+  )
+}
+
+const forecastText: Record<ReceivableKind, { title: string; intro: string }> = {
+  cartao: {
+    title: 'Quanto volta por mês',
+    intro: 'Parcelas dos reembolsos pelo mês em que vencem. Ajuda a ver quanto da fatura do cartão volta para você.',
+  },
+  servico: {
+    title: 'Quanto entra por mês',
+    intro: 'Parcelas dos serviços pelo mês em que vencem.',
+  },
+}
+
+/** Mês a mês: quanto vence, quanto já foi recebido e quanto falta, mais o que ficou atrasado e o que vem depois. */
+function ForecastCard({ kind, forecast }: { kind: ReceivableKind; forecast: ReturnType<typeof forecastByMonth> }) {
+  const shown = forecast.months.filter((m) => m.totalCents > 0)
+  const biggest = Math.max(1, ...shown.map((m) => m.totalCents))
+  const current = forecast.months[0]
+  return (
+    <details className="card forecast">
+      <summary>
+        <span>{forecastText[kind].title}</span>
+        <span className="muted">
+          {current.remainingCents > 0
+            ? `Este mês: ${formatBRL(current.remainingCents)} a receber`
+            : current.totalCents > 0
+              ? 'Este mês: tudo recebido'
+              : 'Nada vence este mês'}
+        </span>
+      </summary>
+      <p className="muted small-note">{forecastText[kind].intro}</p>
+      <ul className="forecast-list">
+        {forecast.earlierCents > 0 && (
+          <li className="forecast-row wide late">
+            <span>Atrasado de meses anteriores</span>
+            <strong>{formatBRL(forecast.earlierCents)}</strong>
+          </li>
+        )}
+        {shown.map((m) => (
+          <li key={m.competence} className="forecast-row">
+            <span>{formatCompetenceShort(m.competence)}</span>
+            <div
+              className="progress"
+              role="img"
+              aria-label={`${formatCompetenceShort(m.competence)}: ${formatBRL(m.receivedCents)} recebidos de ${formatBRL(m.totalCents)}`}
+              style={{ width: `${Math.max(8, Math.round((m.totalCents / biggest) * 100))}%` }}
+            >
+              <div className="progress-fill" style={{ width: `${Math.round((m.receivedCents / m.totalCents) * 100)}%` }} />
+            </div>
+            <strong>{m.remainingCents > 0 ? formatBRL(m.remainingCents) : 'Recebido'}</strong>
+          </li>
+        ))}
+        {forecast.laterCents > 0 && (
+          <li className="forecast-row wide">
+            <span>Depois de {formatCompetenceShort(forecast.months[forecast.months.length - 1].competence)}</span>
+            <strong>{formatBRL(forecast.laterCents)}</strong>
+          </li>
+        )}
+      </ul>
+    </details>
   )
 }

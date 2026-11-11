@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { EntrySheet } from '../components/EntrySheet'
+import { Welcome } from '../components/Welcome'
 import { StatusChip } from '../components/StatusChip'
-import { useBills, useEntries, useToday } from '../data/hooks'
+import { useBills, useEntries, useReceivables, useToday } from '../data/hooks'
 import { ensureEntries, payEntry } from '../data/store'
+import { dismissWelcome, isWelcomeDismissed } from '../data/welcome'
 import { addMonths, competenceOf, formatCompetence, formatDateBR } from '../domain/dates'
 import { amountDue, displayStatus, isPending, remainingCents, sortEntries, summarize } from '../domain/entries'
 import { formatBRL } from '../domain/money'
+import { KIND_INFO, RECEIVABLE_KINDS, listPath, ofKind, summarizePerson } from '../domain/receivables'
 
 export default function Home() {
   const uid = useAuth().user!.uid
@@ -15,9 +18,20 @@ export default function Home() {
   const thisMonth = competenceOf(today)
   const [competence, setCompetence] = useState(thisMonth)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [showWelcome, setShowWelcome] = useState(() => !isWelcomeDismissed())
 
   const bills = useBills(uid)
   const entries = useEntries(uid, competence)
+  const receivables = useReceivables(uid)
+
+  // Parcelas vencidas que outras pessoas ainda não pagaram, separadas por tipo.
+  const lateToReceive = useMemo(
+    () =>
+      RECEIVABLE_KINDS.map((kind) => ({ kind, ...summarizePerson(ofKind(receivables.data, kind), today) })).filter(
+        (k) => k.overdueCount > 0,
+      ),
+    [receivables.data, today],
+  )
 
   // Garante os lançamentos do mês atual, do próximo e do mês que está sendo visto (se for futuro).
   useEffect(() => {
@@ -53,6 +67,15 @@ export default function Home() {
         </button>
       </header>
 
+      {showWelcome && (
+        <Welcome
+          onDismiss={() => {
+            dismissWelcome()
+            setShowWelcome(false)
+          }}
+        />
+      )}
+
       {(entries.error || bills.error) && (
         <p className="error" role="alert">
           Não foi possível carregar os dados. Verifique a conexão e as regras do Firestore.
@@ -64,6 +87,15 @@ export default function Home() {
           {summary.overdueCount === 1 ? '1 conta atrasada' : `${summary.overdueCount} contas atrasadas`}. Confira a lista abaixo.
         </p>
       )}
+      {lateToReceive.map((k) => (
+        <Link key={k.kind} className="banner banner-danger banner-link" to={listPath(k.kind)}>
+          <span>
+            A receber em atraso · {KIND_INFO[k.kind].title}: {k.overdueCount === 1 ? '1 parcela' : `${k.overdueCount} parcelas`},{' '}
+            {formatBRL(k.overdueCents)}
+          </span>
+          <span aria-hidden="true">›</span>
+        </Link>
+      ))}
       {dueToday.length > 0 && (
         <p className="banner banner-warn" role="status">
           Vence hoje: {dueToday.map((e) => e.billName).join(', ')}

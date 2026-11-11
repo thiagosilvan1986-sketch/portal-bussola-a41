@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth'
+import { FeatureList } from '../components/FeatureList'
 
 type Mode = 'signin' | 'signup'
 
@@ -116,6 +117,12 @@ export default function Login() {
             {info}
           </p>
         )}
+
+        <section className="login-features" aria-label="Funcionalidades do Contas em Dia">
+          <h2>Tudo o que você precisa, num só lugar</h2>
+          <FeatureList />
+          <p className="muted small-note">Seus dados são só seus e o app nunca paga nada por você.</p>
+        </section>
       </main>
     </div>
   )

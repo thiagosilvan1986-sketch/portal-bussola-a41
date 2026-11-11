@@ -68,3 +68,10 @@ export function formatCompetence(c: Competence): string {
   )
   return `${name} de ${y}`
 }
+
+/** "2026-11" -> "nov/2026" */
+export function formatCompetenceShort(c: Competence): string {
+  const [y, m] = split(c)
+  const name = new Intl.DateTimeFormat('pt-BR', { month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, 1)))
+  return `${name.replace('.', '')}/${y}`
+}

@@ -1,44 +1,96 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { usePeople, useToday } from '../data/hooks'
-import { createReceivable } from '../data/store'
-import { formatBRL, parseBRLToCents } from '../domain/money'
+import { usePeople, useReceivables, useToday } from '../data/hooks'
+import { createReceivable, updateReceivable } from '../data/store'
+import { centsToInput, formatBRL, parseBRLToCents } from '../domain/money'
 import {
+  KIND_INFO,
   MAX_INSTALLMENTS,
+  RECEIVABLE_KINDS,
+  TONE_LABEL,
   buildInstallments,
+  editReceivable,
   isValidEmail,
   isValidPhone,
+  lastPaidNumber,
+  listPath,
   phoneDigits,
   withFirstReceived,
 } from '../domain/receivables'
+import type { MessageTone, Person, Receivable, ReceivableKind } from '../domain/types'
 
 const NEW_PERSON = '__new'
+const log = (e: unknown) => console.error('Falha ao gravar', e)
 
 export default function ReceivableForm() {
+  const { id } = useParams()
+  const uid = useAuth().user!.uid
+  const people = usePeople(uid)
+  const receivables = useReceivables(uid)
+
+  if (!id) return <Form key="nova" uid={uid} people={people.data} peopleReady={people.ready} />
+
+  if (!people.ready || !receivables.ready) {
+    return (
+      <main className="page">
+        <p className="muted center-text">Carregando…</p>
+      </main>
+    )
+  }
+  const edit = receivables.data.find((r) => r.id === id)
+  if (!edit) {
+    return (
+      <main className="page">
+        <p className="error">Compra não encontrada.</p>
+        <Link className="btn" to="/receber">
+          Voltar
+        </Link>
+      </main>
+    )
+  }
+  return (
+    <Form
+      key={edit.id}
+      uid={uid}
+      people={people.data}
+      peopleReady
+      edit={edit}
+      editPerson={people.data.find((p) => p.id === edit.personId)}
+    />
+  )
+}
+
+interface FormProps {
+  uid: string
+  people: Person[]
+  peopleReady: boolean
+  /** Presente quando está editando uma compra já cadastrada. */
+  edit?: Receivable
+  editPerson?: Person
+}
+
+function Form({ uid, people, peopleReady, edit, editPerson }: FormProps) {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const uid = useAuth().user!.uid
   const today = useToday()
-  const people = usePeople(uid)
 
+  const [kind, setKind] = useState<ReceivableKind>(edit?.kind ?? (params.get('tipo') === 'servico' ? 'servico' : 'cartao'))
   const [personChoice, setPersonChoice] = useState(params.get('pessoa') ?? '')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
-  const [description, setDescription] = useState('')
-  const [total, setTotal] = useState('')
-  const [count, setCount] = useState('10')
-  const [firstDue, setFirstDue] = useState(today)
+  const [tone, setTone] = useState<MessageTone>('amigavel')
+  const [description, setDescription] = useState(edit?.description ?? '')
+  const [total, setTotal] = useState(edit ? centsToInput(edit.totalCents) : '')
+  const [count, setCount] = useState(edit ? String(edit.installmentCount) : '10')
+  const [firstDue, setFirstDue] = useState(edit?.firstDueDate ?? today)
   const [received, setReceived] = useState('0')
-  const [notes, setNotes] = useState('')
+  const [notes, setNotes] = useState(edit?.notes ?? '')
   const [error, setError] = useState<string | null>(null)
 
-  const sortedPeople = useMemo(
-    () => [...people.data].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
-    [people.data],
-  )
-  const isNew = personChoice === NEW_PERSON || (people.ready && sortedPeople.length === 0)
+  const sortedPeople = useMemo(() => [...people].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [people])
+  const isNew = !edit && (personChoice === NEW_PERSON || (peopleReady && sortedPeople.length === 0))
 
   const totalCents = parseBRLToCents(total)
   const n = Number(count)
@@ -53,16 +105,42 @@ export default function ReceivableForm() {
 
   function onSubmit(ev: FormEvent) {
     ev.preventDefault()
-    if (!isNew && !personChoice) return setError('Escolha a pessoa ou cadastre uma nova.')
-    if (isNew) {
-      if (!name.trim()) return setError('Informe o nome da pessoa.')
-      if (!isValidPhone(phone)) return setError('Telefone inválido. Use DDD e número, por exemplo (11) 91234-5678, ou deixe em branco.')
-      if (!isValidEmail(email)) return setError('E-mail inválido. Confira ou deixe em branco.')
+    if (!edit) {
+      if (!isNew && !personChoice) return setError('Escolha a pessoa ou cadastre uma nova.')
+      if (isNew) {
+        if (!name.trim()) return setError('Informe o nome da pessoa.')
+        if (!isValidPhone(phone)) return setError('Telefone inválido. Use DDD e número, por exemplo (11) 91234-5678, ou deixe em branco.')
+        if (!isValidEmail(email)) return setError('E-mail inválido. Confira ou deixe em branco.')
+      }
     }
-    if (!description.trim()) return setError('Informe o que foi comprado ou parcelado.')
+    if (!description.trim()) {
+      return setError(kind === 'servico' ? 'Informe qual foi o serviço.' : 'Informe o que foi comprado ou parcelado.')
+    }
     if (totalCents === null || totalCents <= 0) return setError('Informe o valor total. Exemplo: 420,00')
     if (!validCount) return setError(`O número de parcelas deve ser de 1 a ${MAX_INSTALLMENTS}.`)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDue)) return setError('Informe o vencimento da primeira parcela.')
+
+    if (edit) {
+      const paidUpTo = lastPaidNumber(edit.installments)
+      if (n < paidUpTo) {
+        return setError(`Já existe baixa até a parcela ${paidUpTo}. O número de parcelas não pode ser menor que isso.`)
+      }
+      setError(null)
+      updateReceivable(
+        uid,
+        editReceivable(edit, {
+          kind,
+          description: description.trim(),
+          totalCents,
+          installmentCount: n,
+          firstDueDate: firstDue,
+          notes: notes.trim(),
+        }),
+      ).catch(log)
+      navigate(`/receber/pessoa/${edit.personId}`)
+      return
+    }
+
     const done = Number(received || '0')
     if (!Number.isInteger(done) || done < 0 || done > n - 1) {
       return setError(`As parcelas já recebidas devem ser de 0 a ${n - 1}.`)
@@ -72,9 +150,10 @@ export default function ReceivableForm() {
     const installments = withFirstReceived(buildInstallments(totalCents, n, firstDue), done, today)
     const { personId } = createReceivable(uid, {
       person: isNew
-        ? { name: name.trim(), phone: phoneDigits(phone), email: email.trim() }
+        ? { name: name.trim(), phone: phoneDigits(phone), email: email.trim(), charges: [], tone }
         : { ...sortedPeople.find((p) => p.id === personChoice)!, id: personChoice },
       receivable: {
+        kind,
         description: description.trim(),
         totalCents,
         installmentCount: n,
@@ -86,29 +165,50 @@ export default function ReceivableForm() {
     navigate(`/receber/pessoa/${personId}`)
   }
 
+  const cancelTo = edit ? `/receber/pessoa/${edit.personId}` : listPath(kind)
+
   return (
     <main className="page">
       <header className="page-head">
-        <h1>Nova compra parcelada</h1>
-        <Link className="link-btn" to="/receber">
+        <h1>{edit ? 'Editar compra' : 'Nova compra parcelada'}</h1>
+        <Link className="link-btn" to={cancelTo}>
           Cancelar
         </Link>
       </header>
 
       <form className="stack card" onSubmit={onSubmit} noValidate>
-        {sortedPeople.length > 0 && (
-          <label>
-            Quem vai pagar
-            <select value={isNew ? NEW_PERSON : personChoice} onChange={(e) => setPersonChoice(e.target.value)}>
-              <option value="">Escolha…</option>
-              {sortedPeople.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-              <option value={NEW_PERSON}>+ Nova pessoa</option>
-            </select>
-          </label>
+        <fieldset className="kind-picker">
+          <legend>O que é</legend>
+          {RECEIVABLE_KINDS.map((k) => (
+            <label key={k} className={`kind-option ${kind === k ? 'selected' : ''}`}>
+              <input type="radio" name="tipo" value={k} checked={kind === k} onChange={() => setKind(k)} />
+              <span>
+                <strong>{KIND_INFO[k].title}</strong>
+                <small className="muted">{KIND_INFO[k].hint}</small>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+
+        {edit ? (
+          <p className="muted">
+            Pessoa: <strong>{editPerson?.name ?? '—'}</strong>
+          </p>
+        ) : (
+          sortedPeople.length > 0 && (
+            <label>
+              Quem vai pagar
+              <select value={isNew ? NEW_PERSON : personChoice} onChange={(e) => setPersonChoice(e.target.value)}>
+                <option value="">Escolha…</option>
+                {sortedPeople.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+                <option value={NEW_PERSON}>+ Nova pessoa</option>
+              </select>
+            </label>
+          )
         )}
 
         {isNew && (
@@ -140,12 +240,19 @@ export default function ReceivableForm() {
                 autoComplete="off"
               />
             </label>
+            <label>
+              Tom da cobrança
+              <select value={tone} onChange={(e) => setTone(e.target.value as MessageTone)}>
+                <option value="amigavel">{TONE_LABEL.amigavel} (leve, para amigos e família)</option>
+                <option value="profissional">{TONE_LABEL.profissional} (mais formal)</option>
+              </select>
+            </label>
           </>
         )}
 
         <label>
-          O que foi
-          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex.: Tênis no cartão" />
+          {kind === 'servico' ? 'Qual foi o serviço' : 'O que foi'}
+          <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={KIND_INFO[kind].placeholder} />
         </label>
 
         <div className="row">
@@ -170,16 +277,25 @@ export default function ReceivableForm() {
         </label>
         {preview && <p className="muted preview">{preview}, uma por mês.</p>}
 
-        <label>
-          Parcelas já recebidas
-          <input
-            inputMode="numeric"
-            value={received}
-            onChange={(e) => setReceived(e.target.value.replace(/\D/g, '').slice(0, 2))}
-            placeholder="0"
-          />
-        </label>
-        <p className="muted small-note">Se a compra já está em andamento, informe quantas parcelas a pessoa já pagou.</p>
+        {edit ? (
+          <p className="muted small-note">
+            As baixas já registradas são mantidas pelo número da parcela. Se mudar o valor, parcelas já recebidas podem
+            passar a aparecer como parciais.
+          </p>
+        ) : (
+          <>
+            <label>
+              Parcelas já recebidas
+              <input
+                inputMode="numeric"
+                value={received}
+                onChange={(e) => setReceived(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                placeholder="0"
+              />
+            </label>
+            <p className="muted small-note">Se a compra já está em andamento, informe quantas parcelas a pessoa já pagou.</p>
+          </>
+        )}
 
         <label>
           Observações (opcional)
@@ -193,7 +309,7 @@ export default function ReceivableForm() {
         )}
 
         <button className="btn primary" type="submit">
-          Salvar
+          {edit ? 'Salvar alterações' : 'Salvar'}
         </button>
       </form>
     </main>

@@ -1,9 +1,46 @@
 import { addMonths, competenceOf, diffDays, dueDateFor, formatDateBR } from './dates'
 import { DUE_SOON_DAYS } from './entries'
 import { formatBRL } from './money'
-import type { DisplayStatus, Installment, IsoDate, Person, Receivable } from './types'
+import type {
+  ChargeChannel,
+  ChargeLog,
+  Competence,
+  DisplayStatus,
+  Installment,
+  IsoDate,
+  MessageTone,
+  Person,
+  Receivable,
+  ReceivableKind,
+} from './types'
 
 export const MAX_INSTALLMENTS = 60
+
+export const RECEIVABLE_KINDS: ReceivableKind[] = ['cartao', 'servico']
+
+export const KIND_INFO: Record<ReceivableKind, { tab: string; title: string; hint: string; placeholder: string }> = {
+  cartao: {
+    tab: 'Reembolso do cartão',
+    title: 'Reembolso do cartão',
+    hint: 'Compra passada no seu cartão para outra pessoa. É só o reembolso: cobre a fatura e não é receita.',
+    placeholder: 'Ex.: Tênis no cartão',
+  },
+  servico: {
+    tab: 'Serviços prestados',
+    title: 'Serviço prestado',
+    hint: 'Serviço que você prestou e tem a receber de verdade.',
+    placeholder: 'Ex.: Instalação de ar-condicionado',
+  },
+}
+
+/** Endereço da lista de cada tipo (a de cartão é a padrão). */
+export function listPath(kind: ReceivableKind): string {
+  return kind === 'servico' ? '/receber?aba=servicos' : '/receber'
+}
+
+export function ofKind(receivables: Receivable[], kind: ReceivableKind): Receivable[] {
+  return receivables.filter((r) => r.kind === kind)
+}
 
 /**
  * Divide o total em parcelas. A sobra de centavos vai de 1 em 1 para as primeiras parcelas,
@@ -30,6 +67,41 @@ export function withFirstReceived(installments: Installment[], k: number, today:
       ? { ...i, paidAt: i.dueDate < today ? i.dueDate : today, paidAmountCents: i.amountCents }
       : i,
   )
+}
+
+/** Maior número de parcela que já teve baixa (0 se nenhuma). */
+export function lastPaidNumber(installments: Installment[]): number {
+  return installments.reduce((max, i) => (i.paidAt !== null && i.number > max ? i.number : max), 0)
+}
+
+export interface ReceivableEdit {
+  kind: ReceivableKind
+  description: string
+  totalCents: number
+  installmentCount: number
+  firstDueDate: IsoDate
+  notes: string
+}
+
+/**
+ * Aplica a edição de uma compra. Se valor, número de parcelas e primeiro vencimento não mudaram, as parcelas
+ * ficam como estão. Se mudaram, as parcelas são refeitas e as baixas já registradas são mantidas pelo número
+ * da parcela (quem chama garante que o novo número de parcelas não é menor que a última parcela com baixa).
+ */
+export function editReceivable(r: Receivable, edit: ReceivableEdit): Receivable {
+  const sameSchedule =
+    edit.totalCents === r.totalCents &&
+    edit.installmentCount === r.installmentCount &&
+    edit.firstDueDate === r.firstDueDate
+  const installments = sameSchedule
+    ? r.installments
+    : buildInstallments(edit.totalCents, edit.installmentCount, edit.firstDueDate).map((fresh) => {
+        const old = r.installments.find((i) => i.number === fresh.number)
+        return old && old.paidAt !== null
+          ? { ...fresh, paidAt: old.paidAt, paidAmountCents: old.paidAmountCents }
+          : fresh
+      })
+  return { ...r, ...edit, installments }
 }
 
 export function installmentRemaining(i: Installment): number {
@@ -135,6 +207,98 @@ export function summarizePerson(receivables: Receivable[], today: IsoDate): Pers
   return out
 }
 
+/* ---------- Previsão por mês ---------- */
+
+export interface ForecastMonth {
+  competence: Competence
+  /** Soma das parcelas que vencem no mês, recebidas ou não. */
+  totalCents: number
+  receivedCents: number
+  remainingCents: number
+}
+
+export interface Forecast {
+  /** O que ficou para trás: parcelas de meses anteriores ao atual ainda não quitadas. */
+  earlierCents: number
+  months: ForecastMonth[]
+  /** O que vence depois dos meses mostrados. */
+  laterCents: number
+  laterFrom: Competence
+}
+
+/** Quanto vence (e quanto falta) em cada um dos próximos meses, pelo mês de vencimento da parcela. */
+export function forecastByMonth(receivables: Receivable[], today: IsoDate, monthsAhead = 6): Forecast {
+  const first = competenceOf(today)
+  const months: ForecastMonth[] = Array.from({ length: monthsAhead }, (_, k) => ({
+    competence: addMonths(first, k),
+    totalCents: 0,
+    receivedCents: 0,
+    remainingCents: 0,
+  }))
+  const out: Forecast = { earlierCents: 0, months, laterCents: 0, laterFrom: addMonths(first, monthsAhead) }
+  for (const r of receivables) {
+    for (const i of r.installments) {
+      const c = competenceOf(i.dueDate)
+      const rest = installmentRemaining(i)
+      if (c < first) {
+        out.earlierCents += rest
+      } else if (c >= out.laterFrom) {
+        out.laterCents += rest
+      } else {
+        const m = months[months.findIndex((x) => x.competence === c)]
+        m.totalCents += i.amountCents
+        m.receivedCents += i.paidAt !== null ? (i.paidAmountCents ?? 0) : 0
+        m.remainingCents += rest
+      }
+    }
+  }
+  return out
+}
+
+/* ---------- Histórico de cobranças ---------- */
+
+export const MAX_CHARGE_LOG = 30
+
+const CHANNEL_VIA: Record<ChargeChannel, string> = {
+  whatsapp: 'por WhatsApp',
+  email: 'por e-mail',
+  copia: 'com a mensagem copiada',
+}
+
+export const CHANNEL_LABEL: Record<ChargeChannel, string> = {
+  whatsapp: 'WhatsApp',
+  email: 'E-mail',
+  copia: 'Mensagem copiada',
+}
+
+export function channelVia(channel: ChargeChannel): string {
+  return CHANNEL_VIA[channel]
+}
+
+/** Junta a nova cobrança ao histórico, guardando só as últimas. */
+export function addCharge(charges: ChargeLog[] | undefined, log: ChargeLog): ChargeLog[] {
+  return [...(charges ?? []), log].slice(-MAX_CHARGE_LOG)
+}
+
+export function lastCharge(charges: ChargeLog[] | undefined): ChargeLog | null {
+  let best: ChargeLog | null = null
+  for (const c of charges ?? []) if (best === null || c.date >= best.date) best = c
+  return best
+}
+
+export function daysAgoText(days: number): string {
+  if (days <= 0) return 'hoje'
+  if (days === 1) return 'ontem'
+  return `há ${days} dias`
+}
+
+/** "Última cobrança: há 3 dias por WhatsApp" ou null se nunca cobrou. */
+export function lastChargeText(charges: ChargeLog[] | undefined, today: IsoDate): string | null {
+  const last = lastCharge(charges)
+  if (!last) return null
+  return `Última cobrança: ${daysAgoText(diffDays(last.date, today))} ${channelVia(last.channel)}`
+}
+
 /* ---------- Contato ---------- */
 
 export function phoneDigits(raw: string): string {
@@ -226,21 +390,65 @@ export function nextItems(receivables: Receivable[]): ChargeItem[] {
     .filter((it) => it.installments.length > 0)
 }
 
+/** Como a compra aparece na frase: "(Tênis)" ou "do serviço (Instalação)". */
+function ref(r: Receivable): string {
+  return r.kind === 'servico' ? `do serviço (${r.description})` : `(${r.description})`
+}
+
 function firstName(person: Person): string {
   return person.name.trim().split(/\s+/)[0] || person.name
 }
 
+export const TONE_LABEL: Record<MessageTone, string> = { amigavel: 'Amigável', profissional: 'Profissional' }
+
+export function personTone(person: Pick<Person, 'tone'>): MessageTone {
+  return person.tone === 'profissional' ? 'profissional' : 'amigavel'
+}
+
+/** Jeito de falar na cobrança: amigável (padrão) ou profissional, escolhido para cada pessoa. */
+interface Tone {
+  hello: (name: string) => string
+  missing: string
+  valueOf: string
+  ask: string
+  thanks: string
+  remind: string
+  due: string
+}
+
+const FRIENDLY: Tone = {
+  hello: (name) => `Oi, ${name}! Tudo bem? 😊`,
+  missing: 'Não achei aqui o pagamento',
+  valueOf: 'de',
+  ask: 'Se você já pagou, me avisa que eu dou baixa por aqui! Se ainda não deu, me conta quando consegue?',
+  thanks: 'Valeu!',
+  remind: 'Só passando pra lembrar',
+  due: 'que vence em',
+}
+
+const FORMAL: Tone = {
+  hello: (name) => `Oi, ${name}! Tudo bem?`,
+  missing: 'Não localizei o pagamento',
+  valueOf: 'no valor de',
+  ask: 'Pode me confirmar se já foi pago ou quando consegue pagar?',
+  thanks: 'Obrigado!',
+  remind: 'Passando para lembrar',
+  due: 'com vencimento em',
+}
+
+
 /**
- * Texto para cobrar. Se há parcela vencida, diz que não localizou o pagamento (parcela X de Y, valor).
+ * Texto para cobrar. Se há parcela vencida, diz que não achou o pagamento (parcela X de Y, valor).
  * Sem atraso, vira um lembrete da próxima parcela. Sem nada a receber, devolve null.
  */
 export function chargeMessage(person: Person, receivables: Receivable[], today: IsoDate): ChargeMessage | null {
-  const hello = `Oi, ${firstName(person)}! Tudo bem?`
+  const tone = personTone(person) === 'profissional' ? FORMAL : FRIENDLY
+  const hello = tone.hello(firstName(person))
   const overdue = overdueItems(receivables, today)
 
   if (overdue.length > 0) {
     const total = overdue.reduce((acc, it) => acc + sumRemaining(it.installments), 0)
-    const ask = 'Pode me confirmar se já foi pago ou quando consegue pagar? Obrigado!'
+    const ask = `${tone.ask} ${tone.thanks}`
 
     if (overdue.length === 1) {
       const { receivable: r, installments } = overdue[0]
@@ -252,14 +460,14 @@ export function chargeMessage(person: Person, receivables: Receivable[], today: 
           kind: 'overdue',
           subject,
           totalCents: total,
-          text: `${hello} Não localizei o pagamento da parcela ${nums[0]} de ${r.installmentCount} (${r.description}), no valor de ${formatBRL(total)}, que venceu em ${formatDateBR(oldest)}. ${ask}`,
+          text: `${hello} ${tone.missing} da parcela ${nums[0]} de ${r.installmentCount} ${ref(r)}, ${tone.valueOf} ${formatBRL(total)}, que venceu em ${formatDateBR(oldest)}. ${ask}`,
         }
       }
       return {
         kind: 'overdue',
         subject: `Parcelas em atraso: ${r.description}`,
         totalCents: total,
-        text: `${hello} Não localizei o pagamento das parcelas ${joinNumbers(nums)} de ${r.installmentCount} (${r.description}), que somam ${formatBRL(total)} (a mais antiga venceu em ${formatDateBR(oldest)}). ${ask}`,
+        text: `${hello} ${tone.missing} das parcelas ${joinNumbers(nums)} de ${r.installmentCount} ${ref(r)}, que somam ${formatBRL(total)} (a mais antiga venceu em ${formatDateBR(oldest)}). ${ask}`,
       }
     }
 
@@ -277,7 +485,7 @@ export function chargeMessage(person: Person, receivables: Receivable[], today: 
       kind: 'overdue',
       subject: 'Parcelas em atraso',
       totalCents: total,
-      text: `${hello} Não localizei o pagamento destas parcelas:\n${lines.join('\n')}\nTotal: ${formatBRL(total)}. ${ask}`,
+      text: `${hello} ${tone.missing} destas parcelas:\n${lines.join('\n')}\nTotal: ${formatBRL(total)}. ${ask}`,
     }
   }
 
@@ -291,7 +499,7 @@ export function chargeMessage(person: Person, receivables: Receivable[], today: 
       kind: 'reminder',
       subject: `Lembrete de parcela: ${r.description}`,
       totalCents: total,
-      text: `${hello} Passando para lembrar da parcela ${i.number} de ${r.installmentCount} (${r.description}), de ${formatBRL(total)}, com vencimento em ${formatDateBR(i.dueDate)}. Obrigado!`,
+      text: `${hello} ${tone.remind} da parcela ${i.number} de ${r.installmentCount} ${ref(r)}, de ${formatBRL(total)}, ${tone.due} ${formatDateBR(i.dueDate)}. ${tone.thanks}`,
     }
   }
   const lines = next.map(({ receivable: r, installments }) => {
@@ -302,6 +510,6 @@ export function chargeMessage(person: Person, receivables: Receivable[], today: 
     kind: 'reminder',
     subject: 'Lembrete de parcelas',
     totalCents: total,
-    text: `${hello} Passando para lembrar das próximas parcelas:\n${lines.join('\n')}\nObrigado!`,
+    text: `${hello} ${tone.remind} das próximas parcelas:\n${lines.join('\n')}\n${tone.thanks}`,
   }
 }

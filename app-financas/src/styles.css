@@ -80,7 +80,7 @@ h3 {
 .page {
   max-width: 640px;
   margin: 0 auto;
-  padding: 16px 16px calc(88px + env(safe-area-inset-bottom));
+  padding: 16px 16px calc(72px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -426,33 +426,34 @@ a:focus-visible {
   font-size: 0.85rem;
 }
 
-.bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+.main-nav {
+  max-width: 640px;
+  margin: 0 auto;
   display: flex;
-  justify-content: center;
-  background: var(--card);
-  border-top: 1px solid var(--border);
-  padding-bottom: env(safe-area-inset-bottom);
-  z-index: 10;
+  padding: 0 4px;
 }
 .nav-link {
   flex: 1;
-  max-width: 200px;
+  min-width: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 8px 0;
-  color: var(--muted);
+  justify-content: center;
+  gap: 5px;
+  min-height: 42px;
+  padding: 0 2px;
+  border-bottom: 3px solid transparent;
+  color: #9aa7bd;
   text-decoration: none;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 600;
+  white-space: nowrap;
+}
+.nav-link svg {
+  flex: none;
 }
 .nav-link.active {
-  color: var(--primary);
+  color: #ffffff;
+  border-bottom-color: #3b82f6;
 }
 
 .sheet-backdrop {
@@ -519,6 +520,9 @@ a:focus-visible {
   --ok-text: #86efac;
   --danger-bg: #3b1212;
   --danger: #fca5a5;
+  --primary: #3b82f6;
+  --info-bg: #172a52;
+  --info-text: #93c5fd;
 }
 .login-brand {
   display: flex;
@@ -682,4 +686,324 @@ details > summary {
 .sheet textarea {
   min-height: 120px;
   resize: none;
+}
+
+/* ---- A receber: tipos (cartão x serviço) ---- */
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  background: var(--neutral-bg);
+  border-radius: 12px;
+}
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  line-height: 1.2;
+}
+.tab.active {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.tab-badge {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.kind-hint {
+  margin: -4px 2px 0;
+}
+.kind-section {
+  gap: 12px;
+}
+.kind-title {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.kind-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.kind-picker legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.kind-option {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.kind-option.selected {
+  border-color: var(--primary);
+  background: var(--info-bg);
+}
+.kind-option input {
+  width: 20px;
+  min-height: 0;
+  height: 20px;
+  margin-top: 2px;
+  padding: 0;
+  flex: none;
+  accent-color: var(--primary);
+}
+.kind-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.kind-option strong {
+  font-size: 0.95rem;
+}
+.kind-option small {
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+/* ---- A receber: previsão, histórico e aviso no início ---- */
+details.forecast,
+details.charge-history {
+  padding: 0;
+}
+details.forecast > summary,
+details.charge-history > summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  list-style-position: inside;
+}
+details.forecast[open] > summary,
+details.charge-history[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+details.forecast > .small-note,
+details.forecast > .forecast-list {
+  margin: 10px 14px;
+}
+.forecast-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+.forecast-row {
+  display: grid;
+  grid-template-columns: 74px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+.forecast-row.wide {
+  grid-template-columns: 1fr auto;
+}
+.forecast-row.late {
+  color: var(--danger);
+}
+details.forecast > summary .muted,
+details.charge-history > summary .muted {
+  font-weight: 400;
+}
+.forecast-row .progress {
+  min-width: 18px;
+}
+.charge-list {
+  margin: 0;
+  padding: 4px 14px 10px;
+  list-style: none;
+}
+.charge-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.charge-list li:last-child {
+  border-bottom: 0;
+}
+.banner-note {
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+.banner-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-decoration: none;
+}
+
+/* ---- Apresentação na tela inicial ---- */
+.welcome {
+  gap: 16px;
+  padding: 18px 16px;
+  border-color: var(--primary);
+  background: linear-gradient(180deg, var(--info-bg) 0%, var(--card) 42%);
+}
+.welcome-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.welcome-hero h2 {
+  font-size: 1.55rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.welcome-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.welcome-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.welcome-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--info-bg);
+  color: var(--info-text);
+  border: 1px solid var(--border);
+}
+.welcome-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.welcome-copy strong {
+  font-size: 0.98rem;
+}
+
+/* ---- Funcionalidades na tela de entrada ---- */
+.login-features {
+  width: 100%;
+  max-width: 360px;
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+}
+.login-features h2 {
+  font-size: 1.25rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+/* ---- Planilhas (CSV) ---- */
+.file-btn {
+  position: relative;
+  overflow: hidden;
+  /* o rótulo herda a cor e o tamanho de texto de formulário; aqui ele é um botão */
+  color: var(--text);
+  font-size: 1rem;
+}
+.file-btn:focus-within {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.file-btn.disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.file-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.file-input:disabled {
+  cursor: default;
+}
+.import-preview {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.import-preview p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.import-stats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.import-stats strong {
+  font-size: 1.1rem;
+}
+.import-stats .stat-bad {
+  color: var(--danger);
+}
+.stack.tight {
+  gap: 6px;
+}
+.stack.tight h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+.issue-list {
+  margin: 0;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+.import-preview .actions .btn {
+  flex: 1 1 100%;
+}
+.notice a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
 }

@@ -9,16 +9,17 @@ const icons = {
 
 function Icon({ path }: { path: string }) {
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d={path} />
     </svg>
   )
 }
 
-export function BottomNav() {
+/** Menu principal, no topo (junto do logo), para não ficar por baixo de avisos no rodapé da tela. */
+export function MainNav() {
   const link = ({ isActive }: { isActive: boolean }) => (isActive ? 'nav-link active' : 'nav-link')
   return (
-    <nav className="bottom-nav" aria-label="Navegação principal">
+    <nav className="main-nav" aria-label="Navegação principal">
       <NavLink to="/" end className={link}>
         <Icon path={icons.home} />
         <span>Início</span>

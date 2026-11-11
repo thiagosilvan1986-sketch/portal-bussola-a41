@@ -4,21 +4,29 @@ import { useAuth } from '../auth'
 import { ChargeSheet } from '../components/ChargeSheet'
 import { StatusChip } from '../components/StatusChip'
 import { usePeople, useReceivables, useToday } from '../data/hooks'
-import { deletePerson, deleteReceivable, setInstallmentPayment, updatePerson } from '../data/store'
+import { deletePerson, deleteReceivable, logCharge, setInstallmentPayment, updatePerson } from '../data/store'
 import { formatDateBR } from '../domain/dates'
 import { centsToInput, formatBRL, parseBRLToCents } from '../domain/money'
 import {
+  CHANNEL_LABEL,
+  KIND_INFO,
+  RECEIVABLE_KINDS,
+  TONE_LABEL,
   formatPhone,
   installmentRemaining,
   installmentStatus,
   isSettled,
   isValidEmail,
   isValidPhone,
+  lastChargeText,
+  listPath,
+  ofKind,
+  personTone,
   phoneDigits,
   summarizePerson,
   summarizeReceivable,
 } from '../domain/receivables'
-import type { Installment, IsoDate, Person, Receivable } from '../domain/types'
+import type { Installment, IsoDate, MessageTone, Person, Receivable, ReceivableKind } from '../domain/types'
 
 const log = (e: unknown) => console.error('Falha ao gravar', e)
 
@@ -56,76 +64,31 @@ function Detail({ uid, today, person, receivables }: { uid: string; today: IsoDa
   const [editingContact, setEditingContact] = useState(false)
   const [charging, setCharging] = useState<Receivable[] | null>(null)
 
-  const sorted = useMemo(
-    () =>
-      [...receivables].sort((a, b) => {
-        const sa = summarizeReceivable(a, today)
-        const sb = summarizeReceivable(b, today)
-        return (
-          Number(sb.remainingCents > 0) - Number(sa.remainingCents > 0) ||
-          (sa.nextDueDate ?? '9999').localeCompare(sb.nextDueDate ?? '9999')
-        )
-      }),
-    [receivables, today],
-  )
-  const summary = summarizePerson(receivables, today)
-  const canCharge = summary.remainingCents > 0
+  const kinds = RECEIVABLE_KINDS.filter((k) => ofKind(receivables, k).length > 0)
+  const first = person.name.split(/\s+/)[0]
 
   return (
     <main className="page">
       <header className="page-head">
         <h1>{person.name}</h1>
-        <Link className="link-btn" to="/receber">
+        <Link className="link-btn" to={listPath(kinds[0] ?? 'cartao')}>
           Voltar
         </Link>
       </header>
 
-      {summary.overdueCount > 0 && (
-        <p className="banner banner-danger" role="status">
-          {summary.overdueCount === 1 ? '1 parcela atrasada' : `${summary.overdueCount} parcelas atrasadas`}, somando{' '}
-          {formatBRL(summary.overdueCents)}.
-        </p>
-      )}
-
-      <section className="summary" aria-label="Resumo desta pessoa">
-        <div className="card summary-main">
-          <span className="muted">Falta receber</span>
-          <strong>{formatBRL(summary.remainingCents)}</strong>
-          <span className="muted">
-            {summary.purchaseCount === 0
-              ? 'Nenhuma compra cadastrada'
-              : summary.remainingCents === 0
-                ? 'Tudo recebido'
-                : summary.nextDueDate
-                  ? `Próxima parcela em ${formatDateBR(summary.nextDueDate)}`
-                  : ''}
-          </span>
-        </div>
-        <div className="card">
-          <span className="muted">Já recebido</span>
-          <strong>{formatBRL(summary.receivedCents)}</strong>
-        </div>
-        <div className="card">
-          <span className="muted">Em atraso</span>
-          <strong>{formatBRL(summary.overdueCents)}</strong>
-        </div>
-      </section>
-
-      <div className="actions">
-        <button className="btn primary" disabled={!canCharge} onClick={() => setCharging(receivables)}>
-          Cobrar {person.name.split(/\s+/)[0]}
-        </button>
-        <Link className="btn" to={`/receber/nova?pessoa=${person.id}`}>
-          Nova compra
-        </Link>
-      </div>
-
       <Contact uid={uid} person={person} editing={editingContact} setEditing={setEditingContact} />
 
-      {sorted.length === 0 ? (
+      <ChargeHistory person={person} today={today} />
+
+      {kinds.length === 0 ? (
         <div className="empty card">
           <h2>Nenhuma compra desta pessoa</h2>
           <p className="muted">Toque em “Nova compra” para cadastrar o que foi parcelado.</p>
+          <div className="actions">
+            <Link className="btn primary" to={`/receber/nova?pessoa=${person.id}`}>
+              Nova compra
+            </Link>
+          </div>
           <DeleteButton
             label="Excluir pessoa"
             onConfirm={() => {
@@ -135,8 +98,19 @@ function Detail({ uid, today, person, receivables }: { uid: string; today: IsoDa
           />
         </div>
       ) : (
-        sorted.map((r) => (
-          <Purchase key={r.id} uid={uid} today={today} receivable={r} onCharge={() => setCharging([r])} />
+        kinds.map((kind, idx) => (
+          <KindSection
+            key={kind}
+            uid={uid}
+            today={today}
+            kind={kind}
+            first={first}
+            multiple={kinds.length > 1}
+            newPurchasePath={`/receber/nova?pessoa=${person.id}&tipo=${kind}`}
+            showNewPurchase={idx === 0}
+            receivables={ofKind(receivables, kind)}
+            onCharge={setCharging}
+          />
         ))
       )}
 
@@ -150,9 +124,132 @@ function Detail({ uid, today, person, receivables }: { uid: string; today: IsoDa
             setCharging(null)
             setEditingContact(true)
           }}
+          onCharged={({ channel, totalCents, overdue }) =>
+            logCharge(uid, person, { date: today, channel, totalCents, overdue }).catch(log)
+          }
         />
       )}
     </main>
+  )
+}
+
+/** Resumo, cobrança e compras de um tipo (reembolso do cartão ou serviço) de uma pessoa. */
+function KindSection({
+  uid,
+  today,
+  kind,
+  first,
+  multiple,
+  newPurchasePath,
+  showNewPurchase,
+  receivables,
+  onCharge,
+}: {
+  uid: string
+  today: IsoDate
+  kind: ReceivableKind
+  first: string
+  multiple: boolean
+  newPurchasePath: string
+  showNewPurchase: boolean
+  receivables: Receivable[]
+  onCharge: (list: Receivable[]) => void
+}) {
+  const sorted = useMemo(
+    () =>
+      [...receivables].sort((a, b) => {
+        const sa = summarizeReceivable(a, today)
+        const sb = summarizeReceivable(b, today)
+        return (
+          Number(sb.remainingCents > 0) - Number(sa.remainingCents > 0) ||
+          (sa.nextDueDate ?? '9999').localeCompare(sb.nextDueDate ?? '9999')
+        )
+      }),
+    [receivables, today],
+  )
+  const summary = summarizePerson(receivables, today)
+  const title = KIND_INFO[kind].title
+
+  return (
+    <section className="stack kind-section" aria-label={title}>
+      <h2 className="kind-title">{title}</h2>
+
+      {summary.overdueCount > 0 && (
+        <p className="banner banner-danger" role="status">
+          {summary.overdueCount === 1 ? '1 parcela atrasada' : `${summary.overdueCount} parcelas atrasadas`}, somando{' '}
+          {formatBRL(summary.overdueCents)}.
+        </p>
+      )}
+
+      <div className="summary" role="group" aria-label={`Resumo: ${title}`}>
+        <div className="card summary-main">
+          <span className="muted">Falta receber</span>
+          <strong>{formatBRL(summary.remainingCents)}</strong>
+          <span className="muted">
+            {summary.remainingCents === 0
+              ? 'Tudo recebido'
+              : summary.nextDueDate
+                ? `Próxima parcela em ${formatDateBR(summary.nextDueDate)}`
+                : ''}
+          </span>
+        </div>
+        <div className="card">
+          <span className="muted">Já recebido</span>
+          <strong>{formatBRL(summary.receivedCents)}</strong>
+        </div>
+        <div className="card">
+          <span className="muted">Em atraso</span>
+          <strong>{formatBRL(summary.overdueCents)}</strong>
+        </div>
+      </div>
+
+      <div className="actions">
+        <button
+          className="btn primary"
+          disabled={summary.remainingCents <= 0}
+          aria-label={multiple ? `Cobrar ${first} (${title.toLowerCase()})` : undefined}
+          onClick={() => onCharge(receivables)}
+        >
+          Cobrar {first}
+        </button>
+        {showNewPurchase && (
+          <Link className="btn" to={newPurchasePath}>
+            Nova compra
+          </Link>
+        )}
+      </div>
+
+      {sorted.map((r) => (
+        <Purchase key={r.id} uid={uid} today={today} receivable={r} onCharge={() => onCharge([r])} />
+      ))}
+    </section>
+  )
+}
+
+/** Última cobrança e histórico das cobranças feitas a esta pessoa. */
+function ChargeHistory({ person, today }: { person: Person; today: IsoDate }) {
+  const last = lastChargeText(person.charges, today)
+  if (!last) return null
+  const list = [...person.charges].reverse()
+  return (
+    <details className="card charge-history">
+      <summary>
+        <span>Histórico de cobranças</span>
+        <span className="muted">{last}</span>
+      </summary>
+      <ul className="list charge-list">
+        {list.map((c, idx) => (
+          <li key={`${c.date}-${idx}`}>
+            <span>
+              {formatDateBR(c.date)} · {CHANNEL_LABEL[c.channel]}
+            </span>
+            <span className="muted">
+              {formatBRL(c.totalCents)} · {c.overdue ? 'em atraso' : 'lembrete'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
   )
 }
 
@@ -170,6 +267,7 @@ function Contact({
   const [name, setName] = useState(person.name)
   const [phone, setPhone] = useState(person.phone ? formatPhone(person.phone) : '')
   const [email, setEmail] = useState(person.email)
+  const [tone, setTone] = useState<MessageTone>(personTone(person))
   const [error, setError] = useState<string | null>(null)
 
   function save(ev: FormEvent) {
@@ -177,7 +275,7 @@ function Contact({
     if (!name.trim()) return setError('Informe o nome da pessoa.')
     if (!isValidPhone(phone)) return setError('Telefone inválido. Use DDD e número, por exemplo (11) 91234-5678, ou deixe em branco.')
     if (!isValidEmail(email)) return setError('E-mail inválido. Confira ou deixe em branco.')
-    updatePerson(uid, { id: person.id, name: name.trim(), phone: phoneDigits(phone), email: email.trim() }).catch(log)
+    updatePerson(uid, { ...person, name: name.trim(), phone: phoneDigits(phone), email: email.trim(), tone }).catch(log)
     setError(null)
     setEditing(false)
   }
@@ -200,6 +298,10 @@ function Contact({
             <dt>E-mail</dt>
             <dd>{person.email || <span className="muted">não cadastrado</span>}</dd>
           </div>
+          <div>
+            <dt>Tom da cobrança</dt>
+            <dd>{TONE_LABEL[personTone(person)]}</dd>
+          </div>
         </dl>
       </section>
     )
@@ -219,6 +321,13 @@ function Contact({
       <label>
         E-mail
         <input type="email" inputMode="email" autoCapitalize="none" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ana@exemplo.com" />
+      </label>
+      <label>
+        Tom da cobrança
+        <select value={tone} onChange={(e) => setTone(e.target.value as MessageTone)}>
+          <option value="amigavel">{TONE_LABEL.amigavel} (leve, para amigos e família)</option>
+          <option value="profissional">{TONE_LABEL.profissional} (mais formal)</option>
+        </select>
       </label>
       {error && (
         <p className="error" role="alert">
@@ -272,6 +381,9 @@ function Purchase({ uid, today, receivable, onCharge }: { uid: string; today: Is
             Cobrar esta compra
           </button>
         )}
+        <Link className="btn small" to={`/receber/compra/${receivable.id}/editar`} aria-label={`Editar compra ${receivable.description}`}>
+          Editar
+        </Link>
         <DeleteButton label="Excluir compra" onConfirm={() => deleteReceivable(uid, receivable.id).catch(log)} />
       </div>
     </section>

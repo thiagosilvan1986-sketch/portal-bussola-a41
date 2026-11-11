@@ -33,6 +33,9 @@ export default function Bills() {
         <div className="empty card">
           <h2>Nenhuma conta cadastrada</h2>
           <p className="muted">Toque em “Nova conta” para começar. Dica: comece pelas que mais vencem no mesmo dia.</p>
+          <p className="muted">
+            Já tem uma planilha? <Link to="/ajustes/planilhas">Importe um CSV</Link>.
+          </p>
         </div>
       ) : (
         <ul className="list">

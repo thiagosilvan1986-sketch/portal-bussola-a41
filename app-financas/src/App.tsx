@@ -1,10 +1,10 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth'
 import { AppHeader } from './components/AppHeader'
-import { BottomNav } from './components/BottomNav'
 import { isFirebaseConfigured } from './firebase'
 import BillForm from './pages/BillForm'
 import Bills from './pages/Bills'
+import DataTransfer from './pages/DataTransfer'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import PersonPage from './pages/PersonPage'
@@ -27,11 +27,12 @@ function Gate() {
         <Route path="/contas/:id" element={<BillForm />} />
         <Route path="/receber" element={<Receivables />} />
         <Route path="/receber/nova" element={<ReceivableForm />} />
+        <Route path="/receber/compra/:id/editar" element={<ReceivableForm />} />
         <Route path="/receber/pessoa/:id" element={<PersonPage />} />
         <Route path="/ajustes" element={<Settings />} />
+        <Route path="/ajustes/planilhas" element={<DataTransfer />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      <BottomNav />
     </>
   )
 }

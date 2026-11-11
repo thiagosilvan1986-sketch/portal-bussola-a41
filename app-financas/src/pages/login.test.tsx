@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { authErrorMessage } from '../auth'
 
@@ -40,6 +40,23 @@ describe('Entrada', () => {
     expect(screen.getByAltText('Contas em Dia').getAttribute('src')).toBe('/logo-login.webp')
     fireEvent.click(screen.getByRole('button', { name: 'Entrar com Google' }))
     expect(auth.signIn).toHaveBeenCalledOnce()
+  })
+
+  it('apresenta as funcionalidades do app na própria tela de entrada', () => {
+    render(<Login />)
+    const section = screen.getByRole('region', { name: 'Funcionalidades do Contas em Dia' })
+    expect(within(section).getByRole('heading', { name: 'Tudo o que você precisa, num só lugar' })).toBeTruthy()
+    for (const t of [
+      'Nenhuma conta esquecida',
+      'Pago em um toque',
+      'Quem te deve, na ponta do lápis',
+      'Cobrança sem climão',
+      'Sua planilha, sem retrabalho',
+      'Tudo à vista, logo na entrada',
+    ]) {
+      expect(within(section).getByText(t)).toBeTruthy()
+    }
+    expect(within(section).getByText(/Seus dados são só seus/)).toBeTruthy()
   })
 
   it('entra com e-mail e senha', () => {

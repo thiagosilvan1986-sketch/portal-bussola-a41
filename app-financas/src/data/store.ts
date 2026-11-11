@@ -10,11 +10,13 @@ import {
   where,
   writeBatch,
   type Unsubscribe,
+  type WriteBatch,
 } from 'firebase/firestore'
 import { billAppliesTo, buildEntry, missingEntries } from '../domain/bills'
 import { competenceOf } from '../domain/dates'
-import { withPayment } from '../domain/receivables'
-import type { Bill, Competence, Entry, Installment, IsoDate, Person, Receivable } from '../domain/types'
+import { addCharge, withPayment } from '../domain/receivables'
+import type { NewBill, ReceivableImportPlan } from '../domain/transfer'
+import type { Bill, ChargeLog, Competence, Entry, Installment, IsoDate, Person, Receivable } from '../domain/types'
 import { db } from '../firebase'
 
 type Data<T> = Omit<T, 'id'>
@@ -153,10 +155,12 @@ export function updateEntryDetails(
 
 /* ---------- A receber (pessoas e compras parceladas) ---------- */
 
-const PERSON_DEFAULTS: Data<Person> = { name: '', phone: '', email: '' }
+const PERSON_DEFAULTS: Data<Person> = { name: '', phone: '', email: '', charges: [], tone: 'amigavel' }
 
+// Compras cadastradas antes do campo "tipo" eram todas reembolso de cartão.
 const RECEIVABLE_DEFAULTS: Data<Receivable> = {
   personId: '',
+  kind: 'cartao',
   description: '',
   totalCents: 0,
   installmentCount: 0,
@@ -212,6 +216,11 @@ export function updatePerson(uid: string, person: Person) {
   return setDoc(doc(peopleCol(uid), person.id), withoutId(person))
 }
 
+/** Registra que a pessoa foi cobrada (WhatsApp, e-mail ou mensagem copiada). */
+export function logCharge(uid: string, person: Person, log: ChargeLog) {
+  return updateDoc(doc(peopleCol(uid), person.id), { charges: addCharge(person.charges, log) })
+}
+
 /** Dá baixa (ou desfaz, com null) numa parcela. Reescreve a lista de parcelas da compra. */
 export function setInstallmentPayment(
   uid: string,
@@ -223,10 +232,56 @@ export function setInstallmentPayment(
   return updateDoc(doc(receivablesCol(uid), receivable.id), { installments })
 }
 
+/** Grava a compra editada (veja `editReceivable`, que mantém as baixas já feitas). */
+export function updateReceivable(uid: string, receivable: Receivable) {
+  return setDoc(doc(receivablesCol(uid), receivable.id), { ...withoutId(receivable) })
+}
+
 export function deleteReceivable(uid: string, receivableId: string) {
   return deleteDoc(doc(receivablesCol(uid), receivableId))
 }
 
 export function deletePerson(uid: string, personId: string) {
   return deleteDoc(doc(peopleCol(uid), personId))
+}
+
+/* ---------- Importação de planilhas ---------- */
+
+// O Firestore aceita até 500 operações por lote.
+const BATCH_LIMIT = 400
+
+/**
+ * Grava tudo em lotes. Os lotes saem juntos e o resultado só chega quando o servidor confirma todos;
+ * sem internet o Firestore guarda no aparelho e envia depois (quem chama não deve ficar esperando para sempre).
+ */
+function commitInChunks(operations: ((batch: WriteBatch) => void)[]): Promise<void> {
+  const commits: Promise<void>[] = []
+  for (let i = 0; i < operations.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(database())
+    for (const operation of operations.slice(i, i + BATCH_LIMIT)) operation(batch)
+    commits.push(batch.commit())
+  }
+  return Promise.all(commits).then(() => undefined)
+}
+
+/** Cadastra as contas lidas da planilha. Quem chama já tirou as que existem (`parseBillsCsv`). */
+export function importBills(uid: string, bills: NewBill[]): Promise<void> {
+  return commitInChunks(bills.map((bill) => (batch) => batch.set(doc(billsCol(uid)), bill)))
+}
+
+/** Cadastra as pessoas novas e as compras lidas da planilha. */
+export function importReceivables(uid: string, plan: Pick<ReceivableImportPlan, 'newPeople' | 'items'>): Promise<void> {
+  const operations: ((batch: WriteBatch) => void)[] = []
+  const created = new Map<string, string>()
+  for (const { key, person } of plan.newPeople) {
+    const ref = doc(peopleCol(uid))
+    created.set(key, ref.id)
+    operations.push((batch) => batch.set(ref, person))
+  }
+  for (const item of plan.items) {
+    const personId = item.personId ?? created.get(item.personKey)
+    if (!personId) throw new Error(`Pessoa não encontrada para ${item.receivable.description}`)
+    operations.push((batch) => batch.set(doc(receivablesCol(uid)), { ...item.receivable, personId }))
+  }
+  return commitInChunks(operations)
 }

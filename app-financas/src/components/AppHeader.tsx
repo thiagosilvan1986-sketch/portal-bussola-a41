@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { MainNav } from './MainNav'
 
 export function AppHeader() {
   return (
@@ -8,6 +9,7 @@ export function AppHeader() {
           <img className="brand" src="/logo-horizontal.webp" alt="Contas em Dia" width="874" height="216" />
         </Link>
       </div>
+      <MainNav />
     </header>
   )
 }

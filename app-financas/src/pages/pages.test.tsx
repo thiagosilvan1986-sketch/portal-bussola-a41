@@ -3,7 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildEntry } from '../domain/bills'
-import type { Bill, Entry } from '../domain/types'
+import { dismissWelcome, isWelcomeDismissed, resetWelcome } from '../data/welcome'
+import { buildInstallments } from '../domain/receivables'
+import type { Bill, Entry, Receivable } from '../domain/types'
 
 const TODAY = '2026-11-09'
 
@@ -36,6 +38,7 @@ const entries: Entry[] = [
 const hooks = vi.hoisted(() => ({
   useBills: vi.fn(),
   useEntries: vi.fn(),
+  useReceivables: vi.fn(),
   useToday: vi.fn(),
 }))
 const store = vi.hoisted(() => ({
@@ -52,11 +55,14 @@ vi.mock('../data/store', () => store)
 
 import BillForm from './BillForm'
 import Home from './Home'
+import Settings from './Settings'
 
 beforeEach(() => {
+  dismissWelcome() // os testes do Início não querem a apresentação na frente
   hooks.useToday.mockReturnValue(TODAY)
   hooks.useBills.mockReturnValue({ data: [bill()], ready: true, error: null })
   hooks.useEntries.mockReturnValue({ data: entries, ready: true, error: null })
+  hooks.useReceivables.mockReturnValue({ data: [], ready: true, error: null })
   store.ensureEntries.mockResolvedValue(0)
   store.payEntry.mockResolvedValue(undefined)
   store.saveBill.mockResolvedValue('new-id')
@@ -68,6 +74,58 @@ afterEach(() => {
 })
 
 const text = (el: Element | null) => (el?.textContent ?? '').replace(/ /g, ' ')
+
+describe('Apresentação na tela inicial', () => {
+  const renderHome = () =>
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/ajustes" element={<Settings />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+  it('aparece para quem ainda não viu, resume as funcionalidades e some ao tocar em Começar', () => {
+    resetWelcome()
+    renderHome()
+    const card = screen.getByRole('region', { name: 'Apresentação do Contas em Dia' })
+    expect(within(card).getByRole('heading', { name: 'Planeje. Controle. Realize.' })).toBeTruthy()
+    for (const t of [
+      'Nenhuma conta esquecida',
+      'Pago em um toque',
+      'Quem te deve, na ponta do lápis',
+      'Cobrança sem climão',
+      'Sua planilha, sem retrabalho',
+      'Tudo à vista, logo na entrada',
+    ]) {
+      expect(within(card).getByText(t)).toBeTruthy()
+    }
+    fireEvent.click(within(card).getByRole('button', { name: 'Começar' }))
+    expect(screen.queryByRole('region', { name: 'Apresentação do Contas em Dia' })).toBeNull()
+    expect(isWelcomeDismissed()).toBe(true)
+  })
+
+  it('depois de dispensada, não volta a aparecer ao abrir o app de novo', () => {
+    dismissWelcome()
+    renderHome()
+    expect(screen.queryByRole('region', { name: 'Apresentação do Contas em Dia' })).toBeNull()
+  })
+
+  it('em Ajustes, "Ver apresentação" leva ao início e mostra de novo', () => {
+    dismissWelcome()
+    render(
+      <MemoryRouter initialEntries={['/ajustes']}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/ajustes" element={<Settings />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Ver apresentação' }))
+    expect(screen.getByRole('region', { name: 'Apresentação do Contas em Dia' })).toBeTruthy()
+  })
+})
 
 describe('Início', () => {
   const renderHome = () =>
@@ -90,6 +148,33 @@ describe('Início', () => {
     expect(t).toContain('2 contas pendentes')
 
     expect(screen.getByRole('status').textContent).toContain('1 conta atrasada')
+  })
+
+  it('avisa no início quando alguém está com parcela atrasada, por tipo, e leva à lista certa', () => {
+    const recv = (id: string, kind: Receivable['kind'], description: string): Receivable => ({
+      id,
+      personId: 'p1',
+      kind,
+      description,
+      totalCents: 30000,
+      installmentCount: 3,
+      firstDueDate: '2026-10-01',
+      installments: buildInstallments(30000, 3, '2026-10-01'),
+      notes: '',
+    })
+    // parcelas de 01/10 e 01/11 venceram (2 atrasadas de R$ 100,00)
+    hooks.useReceivables.mockReturnValue({ data: [recv('r1', 'cartao', 'Tênis'), recv('r2', 'servico', 'Pintura')], ready: true, error: null })
+    renderHome()
+    const cartao = screen.getByRole('link', { name: /Reembolso do cartão/ })
+    expect(text(cartao)).toContain('2 parcelas, R$ 200,00')
+    expect(cartao.getAttribute('href')).toBe('/receber')
+    const servico = screen.getByRole('link', { name: /Serviço prestado/ })
+    expect(servico.getAttribute('href')).toBe('/receber?aba=servicos')
+  })
+
+  it('sem atraso a receber, não mostra o aviso', () => {
+    renderHome()
+    expect(screen.queryByText(/A receber em atraso/)).toBeNull()
   })
 
   it('lista por vencimento e mostra o status em texto', () => {

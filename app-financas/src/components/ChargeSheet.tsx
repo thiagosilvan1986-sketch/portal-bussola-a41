@@ -1,7 +1,8 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatBRL } from '../domain/money'
-import { chargeMessage, mailtoUrl, whatsappUrl } from '../domain/receivables'
-import type { IsoDate, Person, Receivable } from '../domain/types'
+import { diffDays } from '../domain/dates'
+import { chargeMessage, daysAgoText, channelVia, lastCharge, mailtoUrl, whatsappUrl } from '../domain/receivables'
+import type { ChargeChannel, IsoDate, Person, Receivable } from '../domain/types'
 
 interface Props {
   person: Person
@@ -10,17 +11,21 @@ interface Props {
   onClose: () => void
   /** Abre a edição do contato quando falta telefone ou e-mail. */
   onEditContact: () => void
+  /** Avisa que a cobrança foi aberta por este canal, para entrar no histórico. */
+  onCharged: (info: { channel: ChargeChannel; totalCents: number; overdue: boolean }) => void
 }
 
 /**
  * Cobrança: mostra a mensagem pronta (editável) e abre o WhatsApp ou o e-mail já com o texto.
  * O app não envia sozinho: quem toca em "enviar" é você, dentro do WhatsApp ou do e-mail.
  */
-export function ChargeSheet({ person, receivables, today, onClose, onEditContact }: Props) {
+export function ChargeSheet({ person, receivables, today, onClose, onEditContact, onCharged }: Props) {
   const message = useMemo(() => chargeMessage(person, receivables, today), [person, receivables, today])
   const [text, setText] = useState(message?.text ?? '')
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // A última cobrança de antes de abrir esta folha, para avisar de cobrança repetida.
+  const [previous] = useState(() => lastCharge(person.charges))
   const box = useRef<HTMLTextAreaElement>(null)
 
   // A caixa cresce até caber a mensagem inteira, para não precisar rolar dentro dela.
@@ -39,9 +44,14 @@ export function ChargeSheet({ person, receivables, today, onClose, onEditContact
   const wa = message ? whatsappUrl(person.phone, text) : null
   const mail = message ? mailtoUrl(person.email, message.subject, text) : null
 
+  function charged(channel: ChargeChannel) {
+    if (message) onCharged({ channel, totalCents: message.totalCents, overdue: message.kind === 'overdue' })
+  }
+
   async function copy() {
     try {
       await navigator.clipboard.writeText(text)
+      charged('copia')
       setCopied(true)
       setError(null)
       setTimeout(() => setCopied(false), 1800)
@@ -79,13 +89,19 @@ export function ChargeSheet({ person, receivables, today, onClose, onEditContact
           <p className="muted">Não há nada a receber desta pessoa.</p>
         ) : (
           <div className="stack">
+            {previous && (
+              <p className={`banner ${diffDays(previous.date, today) <= 2 ? 'banner-warn' : 'banner-note'}`} role="status">
+                Você já cobrou {person.name.split(/\s+/)[0]} {daysAgoText(diffDays(previous.date, today))}{' '}
+                {channelVia(previous.channel)}.
+              </p>
+            )}
             <label>
               Mensagem (você pode ajustar antes de enviar)
               <textarea ref={box} rows={5} value={text} onChange={(e) => setText(e.target.value)} />
             </label>
 
             {wa ? (
-              <a className="btn primary" href={wa} target="_blank" rel="noopener noreferrer">
+              <a className="btn primary" href={wa} target="_blank" rel="noopener noreferrer" onClick={() => charged('whatsapp')}>
                 Enviar pelo WhatsApp
               </a>
             ) : (
@@ -98,7 +114,7 @@ export function ChargeSheet({ person, receivables, today, onClose, onEditContact
             )}
 
             {mail ? (
-              <a className="btn" href={mail}>
+              <a className="btn" href={mail} onClick={() => charged('email')}>
                 Enviar por e-mail
               </a>
             ) : (
