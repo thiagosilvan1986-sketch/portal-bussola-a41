@@ -1,14 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { useBills, useToday } from '../data/hooks'
+import { useBills, useRegistry, useToday } from '../data/hooks'
 import { DeleteButton } from '../components/DeleteButton'
 import { restoreMonth, deleteBill, saveBill } from '../data/store'
 import { settleWithin } from '../data/wait'
 import { RECURRENCE_LABEL } from '../domain/bills'
 import { competenceOf, formatCompetence } from '../domain/dates'
-import { CATEGORIES, PAYMENT_LABEL, QUICK_BILLS } from '../domain/labels'
 import { centsToInput, parseBRLToCents } from '../domain/money'
+import { FALLBACK_CATEGORY, availableTemplates, supplierSuggestions, type Template } from '../domain/registry'
 import type { Bill, PaymentMethod, Recurrence, ValueType } from '../domain/types'
 
 export default function BillForm() {
@@ -16,7 +16,7 @@ export default function BillForm() {
   const uid = useAuth().user!.uid
   const bills = useBills(uid)
 
-  if (!id) return <Editor initial={null} />
+  if (!id) return <Editor initial={null} bills={bills.data} />
   if (!bills.ready) return <main className="page"><p className="muted center-text">Carregando…</p></main>
   const bill = bills.data.find((b) => b.id === id)
   if (!bill) {
@@ -29,27 +29,44 @@ export default function BillForm() {
       </main>
     )
   }
-  return <Editor key={bill.id} initial={bill} />
+  return <Editor key={bill.id} initial={bill} bills={bills.data} />
 }
 
-function Editor({ initial }: { initial: Bill | null }) {
+function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
   const navigate = useNavigate()
   const uid = useAuth().user!.uid
   const today = useToday()
+  const registry = useRegistry(uid).data
 
   const [name, setName] = useState(initial?.name ?? '')
-  const [category, setCategory] = useState(initial?.category ?? 'Outros')
+  const [category, setCategory] = useState(initial?.category ?? FALLBACK_CATEGORY)
   const [supplier, setSupplier] = useState(initial?.supplier ?? '')
   const [valueType, setValueType] = useState<ValueType>(initial?.valueType ?? 'fixed')
   const [amount, setAmount] = useState(initial ? centsToInput(initial.expectedAmountCents) : '')
   const [dueDay, setDueDay] = useState(String(initial?.dueDay ?? ''))
   const [recurrence, setRecurrence] = useState<Recurrence>(initial?.recurrence ?? 'monthly')
   const [startMonth, setStartMonth] = useState(initial?.startMonth ?? competenceOf(today))
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initial?.paymentMethod ?? 'boleto')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initial?.paymentMethod ?? registry.payments[0].id)
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const skipped = [...(initial?.skippedMonths ?? [])].sort().reverse()
+  // Se a conta usa uma categoria ou forma que saiu da lista, ela continua aparecendo para não se perder ao salvar.
+  const categories = registry.categories.includes(category) ? registry.categories : [...registry.categories, category]
+  const payments = registry.payments.some((p) => p.id === paymentMethod) ? registry.payments : [...registry.payments, { id: paymentMethod, label: paymentMethod }]
+  const shortcuts = initial ? [] : availableTemplates(registry.templates, bills)
+  const suppliers = supplierSuggestions(registry, bills)
+
+  function applyTemplate(t: Template) {
+    setName(t.name)
+    setCategory(registry.categories.includes(t.category) ? t.category : FALLBACK_CATEGORY)
+    setValueType(t.valueType)
+    setRecurrence(t.recurrence)
+    setPaymentMethod(registry.payments.some((p) => p.id === t.paymentMethod) ? t.paymentMethod : registry.payments[0].id)
+    setSupplier(t.supplier)
+    if (t.amountCents > 0) setAmount(centsToInput(t.amountCents))
+    if (t.dueDay !== null) setDueDay(String(t.dueDay))
+  }
 
   async function persist(active: boolean) {
     const cents = parseBRLToCents(amount)
@@ -123,20 +140,15 @@ function Editor({ initial }: { initial: Bill | null }) {
       </header>
 
       {!initial && (
-        <div className="chips" aria-label="Atalhos">
-          {QUICK_BILLS.map((q) => (
-            <button
-              key={q.name}
-              type="button"
-              className="chip-btn"
-              onClick={() => {
-                setName(q.name)
-                setCategory(q.category)
-              }}
-            >
-              {q.name}
+        <div className="chips chips-scroll" role="group" aria-label="Atalhos">
+          {shortcuts.map((t) => (
+            <button key={t.id} type="button" className="chip-btn" onClick={() => applyTemplate(t)}>
+              {t.name}
             </button>
           ))}
+          <Link className="chip-btn chip-link" to="/cadastros/atalhos">
+            Meus atalhos
+          </Link>
         </div>
       )}
 
@@ -186,7 +198,7 @@ function Editor({ initial }: { initial: Bill | null }) {
           <label>
             Categoria
             <select value={category} onChange={(e) => setCategory(e.target.value)}>
-              {CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </select>
@@ -194,9 +206,9 @@ function Editor({ initial }: { initial: Bill | null }) {
           <label>
             Forma de pagamento
             <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
-              {Object.entries(PAYMENT_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
+              {payments.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
                 </option>
               ))}
             </select>
@@ -205,7 +217,12 @@ function Editor({ initial }: { initial: Bill | null }) {
 
         <label>
           Fornecedor (opcional)
-          <input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Ex.: Enel" />
+          <input value={supplier} onChange={(e) => setSupplier(e.target.value)} list="bill-suppliers" placeholder="Ex.: Enel" />
+          <datalist id="bill-suppliers">
+            {suppliers.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
         </label>
         <label>
           Observações

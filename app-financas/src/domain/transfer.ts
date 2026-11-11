@@ -1,7 +1,8 @@
 import { competenceOf, daysInMonth, formatDateBR } from './dates'
 import { RECURRENCE_LABEL } from './bills'
 import { parseCsv, toCsv, unprotectCell } from './csv'
-import { CATEGORIES, PAYMENT_LABEL } from './labels'
+import { defaultRegistry, paymentLabel, type Registry } from './registry'
+import { simplify } from './text'
 import { centsToInput, parseBRLToCents } from './money'
 import {
   MAX_INSTALLMENTS,
@@ -80,14 +81,7 @@ export interface ReceivableImportPlan extends ImportReport {
 
 /* ---------- Texto e valores ---------- */
 
-/** "Débito Automático" -> "debitoautomatico". Serve para comparar cabeçalhos, nomes e opções sem se importar com acento, caixa ou pontuação. */
-export function simplify(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '')
-}
+export { simplify }
 
 const MONTH_NAMES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 
@@ -161,6 +155,20 @@ const PAYMENTS: Table<PaymentMethod> = [
   [['pix'], 'pix'],
   [['cartao', 'cartaodecredito', 'credito'], 'cartao'],
 ]
+
+/** Forma de pagamento da planilha: vale o nome ou o código cadastrado, ou um apelido dos padrões (ex.: "débito"). */
+function findPayment(raw: string, registry: Registry): PaymentMethod | undefined {
+  const key = simplify(raw)
+  const own = registry.payments.find((p) => simplify(p.label) === key || simplify(p.id) === key)
+  if (own) return own.id
+  const alias = lookup(raw, PAYMENTS)
+  return alias && registry.payments.some((p) => p.id === alias) ? alias : undefined
+}
+
+/** "A, B ou C" */
+function orList(items: string[]): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} ou ${items[items.length - 1]}`
+}
 
 const KINDS: Table<ReceivableKind> = [
   [['cartao', 'reembolso', 'reembolsodocartao', 'compranocartao', 'cartaodecredito'], 'cartao'],
@@ -271,7 +279,7 @@ const BILL_COLUMNS: Record<BillField, string[]> = {
 
 const monthText = (c: Competence) => `${c.slice(5)}/${c.slice(0, 4)}`
 
-export function billsToCsv(bills: Bill[]): string {
+export function billsToCsv(bills: Bill[], registry: Registry = defaultRegistry()): string {
   const sorted = [...bills].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
   return toCsv([
     BILL_HEADERS,
@@ -284,7 +292,7 @@ export function billsToCsv(bills: Bill[]): string {
       String(b.dueDay),
       RECURRENCE_LABEL[b.recurrence],
       monthText(b.startMonth),
-      PAYMENT_LABEL[b.paymentMethod],
+      paymentLabel(registry, b.paymentMethod),
       b.notes,
       b.active ? 'Sim' : 'Não',
     ]),
@@ -300,7 +308,12 @@ export function billsTemplateCsv(): string {
   ])
 }
 
-export function parseBillsCsv(text: string, existing: Bill[], today: IsoDate): BillImportPlan {
+export function parseBillsCsv(
+  text: string,
+  existing: Bill[],
+  today: IsoDate,
+  registry: Registry = defaultRegistry(),
+): BillImportPlan {
   const base = (report: ImportReport): BillImportPlan => ({ ...report, bills: [] })
   const table = readTable(text)
   if (typeof table === 'string') return base(failed(table))
@@ -332,7 +345,7 @@ export function parseBillsCsv(text: string, existing: Bill[], today: IsoDate): B
     let category = 'Outros'
     const categoryRaw = get('category')
     if (categoryRaw) {
-      const found = CATEGORIES.find((c) => simplify(c) === simplify(categoryRaw))
+      const found = registry.categories.find((c) => simplify(c) === simplify(categoryRaw))
       if (found) category = found
       else warns.push(`categoria “${categoryRaw}” não existe; usei “Outros”`)
     }
@@ -390,12 +403,12 @@ export function parseBillsCsv(text: string, existing: Bill[], today: IsoDate): B
       else errs.push(`início “${startRaw}” inválido (use mês/ano, como 11/2026)`)
     }
 
-    let paymentMethod: PaymentMethod = 'boleto'
+    let paymentMethod: PaymentMethod = registry.payments.some((p) => p.id === 'boleto') ? 'boleto' : registry.payments[0].id
     const paymentRaw = get('payment')
     if (paymentRaw) {
-      const found = lookup(paymentRaw, PAYMENTS)
+      const found = findPayment(paymentRaw, registry)
       if (found) paymentMethod = found
-      else errs.push(`forma de pagamento “${paymentRaw}” não reconhecida (Boleto, Débito automático, PIX ou Cartão)`)
+      else errs.push(`forma de pagamento “${paymentRaw}” não reconhecida (${orList(registry.payments.map((p) => p.label))})`)
     }
 
     let active = true

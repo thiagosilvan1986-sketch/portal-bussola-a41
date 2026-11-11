@@ -1,6 +1,6 @@
 import { FeatureList } from './FeatureList'
 
-/** Apresentação curta das funcionalidades, mostrada na tela inicial até a pessoa dispensar. */
+/** Apresentação curta das funcionalidades, mostrada uma única vez, na primeira entrada. */
 export function Welcome({ onDismiss }: { onDismiss: () => void }) {
   return (
     <section className="card stack welcome" aria-label="Apresentação do Contas em Dia">
@@ -10,7 +10,7 @@ export function Welcome({ onDismiss }: { onDismiss: () => void }) {
       </div>
       <FeatureList />
       <p className="muted small-note">
-        Seus dados são só seus. O app nunca paga nada por você, e dá para instalá-lo no celular em segundos (veja em Ajustes).
+        Seus dados são só seus. O app nunca paga nada por você, e dá para instalá-lo no celular em segundos. A lista completa de funcionalidades fica sempre na aba Sobre.
       </p>
       <button className="btn primary" onClick={onDismiss}>
         Começar

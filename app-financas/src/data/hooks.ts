@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react'
 import { todayInSaoPaulo } from '../domain/dates'
+import { defaultRegistry, type Registry } from '../domain/registry'
 import type { Bill, Competence, Entry, IsoDate, Person, Receivable } from '../domain/types'
-import { subscribeBills, subscribeEntries, subscribeEntriesRange, subscribePeople, subscribeReceivables } from './store'
+import {
+  subscribeBills,
+  subscribeEntries,
+  subscribeEntriesRange,
+  subscribePeople,
+  subscribeReceivables,
+  subscribeRegistry,
+} from './store'
 
 interface Live<T> {
   data: T[]
@@ -80,6 +88,25 @@ export function useEntriesRange(uid: string, from: Competence, to: Competence): 
       (e) => setState((s) => ({ ...s, ready: true, error: e.message })),
     )
   }, [uid, from, to])
+  return state
+}
+
+/** Cadastros da pessoa (categorias, formas de pagamento, atalhos, fornecedores). Até carregar, valem os padrões. */
+export function useRegistry(uid: string): { data: Registry; ready: boolean; error: string | null } {
+  const [state, setState] = useState<{ data: Registry; ready: boolean; error: string | null }>(() => ({
+    data: defaultRegistry(),
+    ready: false,
+    error: null,
+  }))
+  useEffect(
+    () =>
+      subscribeRegistry(
+        uid,
+        (data) => setState({ data, ready: true, error: null }),
+        (e) => setState((s) => ({ ...s, ready: true, error: e.message })),
+      ),
+    [uid],
+  )
   return state
 }
 

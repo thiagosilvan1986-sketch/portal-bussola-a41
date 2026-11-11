@@ -1,6 +1,7 @@
 export type Recurrence = 'monthly' | 'bimonthly' | 'quarterly' | 'yearly'
 export type ValueType = 'fixed' | 'variable'
-export type PaymentMethod = 'boleto' | 'debito_automatico' | 'pix' | 'cartao'
+/** Código da forma de pagamento cadastrada (os padrões: boleto, debito_automatico, pix, cartao; as da pessoa ganham código próprio). */
+export type PaymentMethod = string
 
 /** Competência no formato AAAA-MM. */
 export type Competence = string

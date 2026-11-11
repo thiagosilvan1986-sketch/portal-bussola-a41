@@ -1,13 +1,17 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PrivacyProvider } from '../data/privacy'
+const auth = vi.hoisted(() => ({ signOut: vi.fn() }))
+vi.mock('../auth', () => ({ useAuth: () => ({ user: { uid: 'u1', email: 'a@b.c' }, signOut: auth.signOut }) }))
+
 import { AppHeader } from './AppHeader'
 
 afterEach(() => {
   cleanup()
   localStorage.clear()
+  vi.clearAllMocks()
 })
 
 describe('Cabeçalho do app', () => {
@@ -34,7 +38,8 @@ describe('Cabeçalho do app', () => {
       ['Contas', '/contas'],
       ['A receber', '/receber'],
       ['Relatórios', '/relatorios'],
-      ['Ajustes', '/ajustes'],
+      ['Cadastros', '/cadastros'],
+      ['Sobre', '/sobre'],
     ])
     expect(within(nav).getByRole('link', { name: 'A receber' }).getAttribute('aria-current')).toBe('page')
     expect(within(nav).getByRole('link', { name: 'Início' }).getAttribute('aria-current')).toBeNull()
@@ -83,7 +88,7 @@ describe('Cabeçalho do app', () => {
     expect(links.map((a) => [a.querySelector('strong')?.textContent, a.getAttribute('href')])).toEqual([
       ['Conta a pagar', '/contas/nova'],
       ['Valor a receber', '/receber/nova'],
-      ['Importar planilha', '/ajustes/planilhas'],
+      ['Importar planilha', '/cadastros/planilhas'],
     ])
     fireEvent.click(within(dialog).getByRole('button', { name: 'Fechar' }))
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -111,5 +116,53 @@ describe('Cabeçalho do app', () => {
     fireEvent.click(screen.getByRole('button', { name: /Incluir/ }))
     fireEvent.click(screen.getByRole('link', { name: /Conta a pagar/ }))
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('o olhinho mostra olho aberto com os valores à vista e olho fechado com os valores ocultos, sempre com texto', () => {
+    render(
+      <MemoryRouter>
+        <PrivacyProvider>
+          <AppHeader />
+        </PrivacyProvider>
+      </MemoryRouter>,
+    )
+    const open = screen.getByRole('button', { name: 'Ocultar valores' })
+    expect(open.textContent).toBe('Ocultar')
+    // olho aberto: uma pupila (círculo) e nenhum traço de pálpebra fechada
+    expect(open.querySelector('circle')).toBeTruthy()
+    expect(open.querySelectorAll('path')).toHaveLength(1)
+
+    fireEvent.click(open)
+    const closed = screen.getByRole('button', { name: 'Mostrar valores' })
+    expect(closed.textContent).toBe('Mostrar')
+    // olho fechado: sem pupila; a pálpebra e três cílios, e nenhum risco por cima
+    expect(closed.querySelector('circle')).toBeNull()
+    expect(closed.querySelectorAll('path')).toHaveLength(4)
+  })
+
+  it('tem o botão de desligar, com o texto Sair, ao lado do Incluir; ele encerra a sessão', () => {
+    render(
+      <MemoryRouter>
+        <AppHeader />
+      </MemoryRouter>,
+    )
+    const actions = document.querySelector('.header-actions')!
+    const labels = within(actions as HTMLElement)
+      .getAllByRole('button')
+      .map((b) => b.textContent?.replace(/＋\s*/, '').trim())
+    expect(labels).toEqual(['Ocultar', 'Incluir', 'Sair'])
+    fireEvent.click(screen.getByRole('button', { name: 'Sair do app' }))
+    expect(auth.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('a logo leva sempre ao Início, de qualquer tela', () => {
+    render(
+      <MemoryRouter initialEntries={['/cadastros/atalhos/novo']}>
+        <AppHeader />
+      </MemoryRouter>,
+    )
+    const logo = screen.getByRole('link', { name: /ir para o início/i })
+    expect(logo.getAttribute('href')).toBe('/')
+    expect(logo.querySelector('img')).toBeTruthy()
   })
 })

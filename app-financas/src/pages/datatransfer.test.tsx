@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultRegistry } from '../domain/registry'
 import { buildInstallments } from '../domain/receivables'
 import type { Bill, Person, Receivable } from '../domain/types'
 
@@ -11,6 +12,7 @@ const hooks = vi.hoisted(() => ({
   useBills: vi.fn(),
   usePeople: vi.fn(),
   useReceivables: vi.fn(),
+  useRegistry: vi.fn(),
   useToday: vi.fn(),
 }))
 const store = vi.hoisted(() => ({ importBills: vi.fn(), importReceivables: vi.fn() }))
@@ -58,10 +60,10 @@ function setData(bills: Bill[], people: Person[], receivables: Receivable[], rea
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/ajustes/planilhas']}>
+    <MemoryRouter initialEntries={['/cadastros/planilhas']}>
       <Routes>
-        <Route path="/ajustes/planilhas" element={<DataTransfer />} />
-        <Route path="/ajustes" element={<p>Ajustes</p>} />
+        <Route path="/cadastros/planilhas" element={<DataTransfer />} />
+        <Route path="/cadastros" element={<p>Cadastros</p>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -77,6 +79,7 @@ async function upload(input: HTMLElement, content: string | Uint8Array, fileName
 
 beforeEach(() => {
   hooks.useToday.mockReturnValue(TODAY)
+  hooks.useRegistry.mockReturnValue({ data: defaultRegistry(), ready: true, error: null })
   setData([], [], [])
   store.importBills.mockResolvedValue(undefined)
   store.importReceivables.mockResolvedValue(undefined)

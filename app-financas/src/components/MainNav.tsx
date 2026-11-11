@@ -5,7 +5,8 @@ const icons = {
   bills: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm3 4h8M8 12h8M8 16h5',
   receive: 'M12 4v11m0 0-4-4m4 4 4-4M5 20h14',
   reports: 'M5 20V10m7 10V4m7 16v-7',
-  settings: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4.500v5M9 14.500v5',
+  registry: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4.500v5M9 14.500v5',
+  about: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm0-10v6m0-9v.010',
 }
 
 function Icon({ path }: { path: string }) {
@@ -37,9 +38,13 @@ export function MainNav() {
         <Icon path={icons.reports} />
         <span>Relatórios</span>
       </NavLink>
-      <NavLink to="/ajustes" className={link}>
-        <Icon path={icons.settings} />
-        <span>Ajustes</span>
+      <NavLink to="/cadastros" className={link}>
+        <Icon path={icons.registry} />
+        <span>Cadastros</span>
+      </NavLink>
+      <NavLink to="/sobre" className={link}>
+        <Icon path={icons.about} />
+        <span>Sobre</span>
       </NavLink>
     </nav>
   )

@@ -1,14 +1,15 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { useBills } from '../data/hooks'
+import { useBills, useRegistry } from '../data/hooks'
 import { RECURRENCE_LABEL } from '../domain/bills'
-import { PAYMENT_LABEL } from '../domain/labels'
+import { paymentLabel } from '../domain/registry'
 import { useMoney } from '../data/privacy'
 
 export default function Bills() {
   const money = useMoney()
   const uid = useAuth().user!.uid
   const bills = useBills(uid)
+  const registry = useRegistry(uid).data
   const sorted = [...bills.data].sort(
     (a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'pt-BR'),
   )
@@ -35,7 +36,7 @@ export default function Bills() {
           <h2>Nenhuma conta cadastrada</h2>
           <p className="muted">Toque em “Nova conta” para começar. Dica: comece pelas que mais vencem no mesmo dia.</p>
           <p className="muted">
-            Já tem uma planilha? <Link to="/ajustes/planilhas">Importe um CSV</Link>.
+            Já tem uma planilha? <Link to="/cadastros/planilhas">Importe um CSV</Link>.
           </p>
         </div>
       ) : (
@@ -45,7 +46,7 @@ export default function Bills() {
               <Link className="row-main" to={`/contas/${b.id}`}>
                 <span className="row-title">{b.name}</span>
                 <span className="muted">
-                  Dia {b.dueDay} · {RECURRENCE_LABEL[b.recurrence]} · {PAYMENT_LABEL[b.paymentMethod]}
+                  Dia {b.dueDay} · {RECURRENCE_LABEL[b.recurrence]} · {paymentLabel(registry, b.paymentMethod)}
                 </span>
                 {!b.active && <span className="chip chip-prevista">Arquivada</span>}
               </Link>

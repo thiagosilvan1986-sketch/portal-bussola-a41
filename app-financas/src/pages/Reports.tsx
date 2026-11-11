@@ -101,8 +101,11 @@ export default function Reports() {
       </div>
 
       <header className="month-nav">
-        <button className="icon-btn" aria-label="Período anterior" onClick={() => move(-1)}>
-          ‹
+        <button className="icon-btn labeled" aria-label="Período anterior" onClick={() => move(-1)}>
+          <span className="glyph" aria-hidden="true">
+            ‹
+          </span>
+          <span className="label">Anterior</span>
         </button>
         <div className="month-title">
           <h2 aria-live="polite">{periodTitle(period)}</h2>
@@ -113,8 +116,11 @@ export default function Reports() {
             </button>
           )}
         </div>
-        <button className="icon-btn" aria-label="Próximo período" onClick={() => move(1)}>
-          ›
+        <button className="icon-btn labeled" aria-label="Próximo período" onClick={() => move(1)}>
+          <span className="glyph" aria-hidden="true">
+            ›
+          </span>
+          <span className="label">Próximo</span>
         </button>
       </header>
 

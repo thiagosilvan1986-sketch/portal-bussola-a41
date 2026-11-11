@@ -2,8 +2,9 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultRegistry } from '../domain/registry'
 import { buildEntry } from '../domain/bills'
-import { dismissWelcome, isWelcomeDismissed, resetWelcome } from '../data/welcome'
+import { dismissWelcome, isWelcomeDismissed } from '../data/welcome'
 import { buildInstallments } from '../domain/receivables'
 import type { Bill, Entry, Receivable } from '../domain/types'
 
@@ -39,6 +40,7 @@ const hooks = vi.hoisted(() => ({
   useBills: vi.fn(),
   useEntries: vi.fn(),
   useReceivables: vi.fn(),
+  useRegistry: vi.fn(),
   useToday: vi.fn(),
 }))
 const store = vi.hoisted(() => ({
@@ -55,11 +57,11 @@ vi.mock('../data/store', () => store)
 
 import BillForm from './BillForm'
 import Home from './Home'
-import Settings from './Settings'
 
 beforeEach(() => {
   dismissWelcome() // os testes do Início não querem a apresentação na frente
   hooks.useToday.mockReturnValue(TODAY)
+  hooks.useRegistry.mockReturnValue({ data: defaultRegistry(), ready: true, error: null })
   hooks.useBills.mockReturnValue({ data: [bill()], ready: true, error: null })
   hooks.useEntries.mockReturnValue({ data: entries, ready: true, error: null })
   hooks.useReceivables.mockReturnValue({ data: [], ready: true, error: null })
@@ -76,17 +78,17 @@ afterEach(() => {
 const text = (el: Element | null) => (el?.textContent ?? '').replace(/ /g, ' ')
 
 describe('Apresentação na tela inicial', () => {
+  const resetWelcome = () => window.localStorage.removeItem('contas-em-dia:apresentacao-vista')
   const renderHome = () =>
     render(
       <MemoryRouter initialEntries={['/']}>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/ajustes" element={<Settings />} />
         </Routes>
       </MemoryRouter>,
     )
 
-  it('aparece para quem ainda não viu, resume as funcionalidades e some ao tocar em Começar', () => {
+  it('aparece na primeira entrada, resume as funcionalidades e some ao tocar em Começar', () => {
     resetWelcome()
     renderHome()
     const card = screen.getByRole('region', { name: 'Apresentação do Contas em Dia' })
@@ -100,33 +102,31 @@ describe('Apresentação na tela inicial', () => {
       'Sua planilha, sem retrabalho',
       'Privacidade num toque',
       'Você no controle',
+      'Do seu jeito',
       'Tudo à vista, logo na entrada',
     ]) {
       expect(within(card).getByText(t)).toBeTruthy()
     }
+    expect(within(card).getByText(/aba Sobre/)).toBeTruthy()
     fireEvent.click(within(card).getByRole('button', { name: 'Começar' }))
     expect(screen.queryByRole('region', { name: 'Apresentação do Contas em Dia' })).toBeNull()
     expect(isWelcomeDismissed()).toBe(true)
   })
 
-  it('depois de dispensada, não volta a aparecer ao abrir o app de novo', () => {
-    dismissWelcome()
+  it('aparece uma única vez: já na primeira exibição fica registrado, mesmo sem tocar em Começar', () => {
+    resetWelcome()
+    const first = renderHome()
+    expect(screen.getByRole('region', { name: 'Apresentação do Contas em Dia' })).toBeTruthy()
+    expect(isWelcomeDismissed()).toBe(true)
+    first.unmount()
     renderHome()
     expect(screen.queryByRole('region', { name: 'Apresentação do Contas em Dia' })).toBeNull()
   })
 
-  it('em Ajustes, "Ver apresentação" leva ao início e mostra de novo', () => {
+  it('depois de vista, não volta a aparecer ao abrir o app de novo', () => {
     dismissWelcome()
-    render(
-      <MemoryRouter initialEntries={['/ajustes']}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/ajustes" element={<Settings />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Ver apresentação' }))
-    expect(screen.getByRole('region', { name: 'Apresentação do Contas em Dia' })).toBeTruthy()
+    renderHome()
+    expect(screen.queryByRole('region', { name: 'Apresentação do Contas em Dia' })).toBeNull()
   })
 })
 
@@ -191,10 +191,10 @@ describe('Início', () => {
 
   it('o botão de check paga o valor a pagar com a data de hoje', () => {
     renderHome()
-    fireEvent.click(screen.getByLabelText('Marcar Energia como paga'))
+    fireEvent.click(screen.getByLabelText('Paguei Energia'))
     expect(store.payEntry).toHaveBeenCalledWith('u1', 'b1_2026-11', 20000, TODAY)
     // conta já paga não tem botão
-    expect(screen.queryByLabelText('Marcar Condomínio como paga')).toBeNull()
+    expect(screen.queryByLabelText('Paguei Condomínio')).toBeNull()
   })
 
   it('gera os lançamentos do mês atual e do próximo', async () => {
@@ -291,6 +291,6 @@ describe('Início: conta variável sem valor', () => {
     )
     expect(text(screen.getByLabelText('Resumo do mês'))).toContain('1 conta pendente')
     expect(screen.getByText('Valor a informar')).toBeTruthy()
-    expect(screen.queryByLabelText('Marcar Água como paga')).toBeNull()
+    expect(screen.queryByLabelText('Paguei Água')).toBeNull()
   })
 })

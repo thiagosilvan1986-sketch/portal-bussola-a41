@@ -139,7 +139,7 @@ export default function Receivables() {
           <h2>{emptyText[kind].title}</h2>
           <p className="muted">{emptyText[kind].body}</p>
           <p className="muted">
-            Já tem uma planilha? <Link to="/ajustes/planilhas">Importe um CSV</Link>.
+            Já tem uma planilha? <Link to="/cadastros/planilhas">Importe um CSV</Link>.
           </p>
           <Link className="btn primary" to={kind === 'servico' ? '/receber/nova?tipo=servico' : '/receber/nova'}>
             Nova compra

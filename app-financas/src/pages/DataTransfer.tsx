@@ -2,7 +2,7 @@ import { useId, useRef, useState, type ChangeEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { readCsvFile, saveCsv } from '../data/files'
-import { useBills, usePeople, useReceivables, useToday } from '../data/hooks'
+import { useBills, usePeople, useReceivables, useRegistry, useToday } from '../data/hooks'
 import { importBills, importReceivables } from '../data/store'
 import {
   billsTemplateCsv,
@@ -227,6 +227,7 @@ export default function DataTransfer() {
   const uid = useAuth().user!.uid
   const today = useToday()
   const bills = useBills(uid)
+  const registry = useRegistry(uid).data
   const people = usePeople(uid)
   const receivables = useReceivables(uid)
   const receivablesReady = people.ready && receivables.ready
@@ -235,7 +236,7 @@ export default function DataTransfer() {
     <main className="page">
       <header className="page-head">
         <h1>Planilhas (CSV)</h1>
-        <Link className="btn small" to="/ajustes">
+        <Link className="btn small" to="/cadastros">
           Voltar
         </Link>
       </header>
@@ -252,9 +253,9 @@ export default function DataTransfer() {
         existing={bills.ready ? bills.data.length : null}
         today={today}
         exportName="contas-a-pagar"
-        makeExport={() => billsToCsv(bills.data)}
+        makeExport={() => billsToCsv(bills.data, registry)}
         makeTemplate={billsTemplateCsv}
-        analyze={(text) => parseBillsCsv(text, bills.data, today)}
+        analyze={(text) => parseBillsCsv(text, bills.data, today, registry)}
         readyCount={(plan) => plan.bills.length}
         save={(plan) => importBills(uid, plan.bills)}
         goTo={{ to: '/contas', label: 'Ver contas' }}

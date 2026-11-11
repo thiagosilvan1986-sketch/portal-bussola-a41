@@ -12,6 +12,7 @@ import {
   receivablesToCsv,
 } from './transfer'
 import { buildInstallments, withPayment } from './receivables'
+import { addCategory, addPayment, defaultRegistry, removePayment, renamePayment } from './registry'
 import type { Bill, Person, Receivable } from './types'
 
 const TODAY = '2026-11-09'
@@ -198,9 +199,39 @@ describe('contas a pagar (CSV)', () => {
   })
 
   it('categoria desconhecida vira Outros, com aviso', () => {
-    const plan = parseBillsCsv('Nome;Categoria;Dia do vencimento;Valor\nRação;Pets;3;80\n', [], TODAY)
+    const plan = parseBillsCsv('Nome;Categoria;Dia do vencimento;Valor\nPasseio;Viagens;3;80\n', [], TODAY)
     expect(plan.bills[0].category).toBe('Outros')
-    expect(plan.warnings).toEqual([{ line: 2, message: 'categoria “Pets” não existe; usei “Outros”' }])
+    expect(plan.warnings).toEqual([{ line: 2, message: 'categoria “Viagens” não existe; usei “Outros”' }])
+  })
+
+  it('aceita as categorias e formas de pagamento que a pessoa cadastrou', () => {
+    let reg = defaultRegistry()
+    const withTrips = addCategory(reg, 'Viagens')
+    const withTransfer = withTrips.ok ? addPayment(withTrips.value, 'Transferência') : withTrips
+    if (!withTransfer.ok) throw new Error(withTransfer.error)
+    reg = withTransfer.value
+    const csv = 'Nome;Categoria;Forma de pagamento;Dia do vencimento;Valor\nPasseio;viagens;transferencia;3;80\nLuz;Pets;PIX;5;10\n'
+    const plan = parseBillsCsv(csv, [], TODAY, reg)
+    expect(plan.errors).toEqual([])
+    expect(plan.bills[0]).toMatchObject({ category: 'Viagens', paymentMethod: 'p_transferencia' })
+    expect(plan.bills[1]).toMatchObject({ category: 'Pets', paymentMethod: 'pix' })
+  })
+
+  it('sem o cadastro da pessoa, vale o padrão; e uma forma que ela apagou deixa de ser aceita', () => {
+    const removed = removePayment(defaultRegistry(), 'cartao', 'boleto')
+    if (!removed.ok) throw new Error(removed.error)
+    const plan = parseBillsCsv('Nome;Forma de pagamento;Dia do vencimento;Valor\nLuz;Cartão;5;10\n', [], TODAY, removed.value)
+    expect(plan.bills).toEqual([])
+    expect(plan.errors[0].message).toContain('forma de pagamento “Cartão” não reconhecida (Boleto, Débito automático ou PIX)')
+  })
+
+  it('o apelido "débito" continua valendo e a exportação usa o nome cadastrado da forma de pagamento', () => {
+    const plan = parseBillsCsv('Nome;Forma de pagamento;Dia do vencimento;Valor\nLuz;débito;5;10\n', [], TODAY)
+    expect(plan.bills[0].paymentMethod).toBe('debito_automatico')
+    const renamed = renamePayment(defaultRegistry(), 'pix', 'Pix instantâneo')
+    if (!renamed.ok) throw new Error(renamed.error)
+    const csv = billsToCsv([{ ...luz, paymentMethod: 'pix' }], renamed.value)
+    expect(csv).toContain('Pix instantâneo')
   })
 
   it('recusa linhas com problema e diz qual linha e por quê', () => {

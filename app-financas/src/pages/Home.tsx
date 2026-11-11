@@ -21,6 +21,11 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showWelcome, setShowWelcome] = useState(() => !isWelcomeDismissed())
 
+  // A apresentação aparece uma única vez: ao mostrá-la, já fica registrado que foi vista.
+  useEffect(() => {
+    if (showWelcome) dismissWelcome()
+  }, [showWelcome])
+
   const bills = useBills(uid)
   const entries = useEntries(uid, competence)
   const receivables = useReceivables(uid)
@@ -62,8 +67,11 @@ export default function Home() {
   return (
     <main className="page">
       <header className="month-nav">
-        <button className="icon-btn" aria-label="Mês anterior" onClick={() => setCompetence(addMonths(competence, -1))}>
-          ‹
+        <button className="icon-btn labeled" aria-label="Mês anterior" onClick={() => setCompetence(addMonths(competence, -1))}>
+          <span className="glyph" aria-hidden="true">
+            ‹
+          </span>
+          <span className="label">Anterior</span>
         </button>
         <div className="month-title">
           <h1>{formatCompetence(competence)}</h1>
@@ -73,8 +81,11 @@ export default function Home() {
             </button>
           )}
         </div>
-        <button className="icon-btn" aria-label="Próximo mês" onClick={() => setCompetence(addMonths(competence, 1))}>
-          ›
+        <button className="icon-btn labeled" aria-label="Próximo mês" onClick={() => setCompetence(addMonths(competence, 1))}>
+          <span className="glyph" aria-hidden="true">
+            ›
+          </span>
+          <span className="label">Próximo</span>
         </button>
       </header>
 
@@ -173,11 +184,11 @@ export default function Home() {
                   )}
                   {pending && !toInform && (
                     <button
-                      className="check-btn"
-                      aria-label={`Marcar ${e.billName} como paga`}
+                      className="check-btn labeled"
+                      aria-label={`Paguei ${e.billName}`}
                       onClick={() => payEntry(uid, e.id, amountDue(e), today).catch((err) => console.error(err))}
                     >
-                      ✓
+                      <span aria-hidden="true">✓</span> Paguei
                     </button>
                   )}
                 </div>

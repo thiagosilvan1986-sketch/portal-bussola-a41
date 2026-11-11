@@ -40,13 +40,18 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
     text: 'Inclua, edite ou exclua qualquer conta, lançamento, pessoa ou compra. Antes de apagar, o app pede confirmação.',
   },
   {
+    icon: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4.500v5M9 14.500v5',
+    title: 'Do seu jeito',
+    text: 'Em Cadastros, crie e mude categorias, formas de pagamento, atalhos de conta e fornecedores. Renomear atualiza tudo o que já existe.',
+  },
+  {
     icon: 'M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7zm4 10a2 2 0 0 0 4 0',
     title: 'Tudo à vista, logo na entrada',
     text: 'Atrasos e vencimentos de hoje te recebem aqui, antes de virarem problema.',
   },
 ]
 
-/** As funcionalidades do app, em lista com ícones. Usada na tela inicial e na tela de entrada. */
+/** As funcionalidades do app, em lista com ícones. Fica fixa na aba Sobre; também aparece uma vez na primeira entrada e na tela de login. */
 export function FeatureList() {
   return (
     <ul className="welcome-list">

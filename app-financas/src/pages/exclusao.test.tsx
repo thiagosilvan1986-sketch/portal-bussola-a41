@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { defaultRegistry } from '../domain/registry'
 import { dismissWelcome } from '../data/welcome'
 import { billAppliesTo, buildEntry, missingEntries } from '../domain/bills'
 import { removeCharge } from '../domain/receivables'
@@ -30,6 +31,7 @@ const hooks = vi.hoisted(() => ({
   useBills: vi.fn(),
   useEntries: vi.fn(),
   useReceivables: vi.fn(),
+  useRegistry: vi.fn(),
   useToday: vi.fn(),
 }))
 const store = vi.hoisted(() => ({
@@ -53,6 +55,7 @@ import Home from './Home'
 beforeEach(() => {
   dismissWelcome()
   hooks.useToday.mockReturnValue(TODAY)
+  hooks.useRegistry.mockReturnValue({ data: defaultRegistry(), ready: true, error: null })
   hooks.useBills.mockReturnValue({ data: [bill()], ready: true, error: null })
   hooks.useEntries.mockReturnValue({ data: [buildEntry(bill(), '2026-11')], ready: true, error: null })
   hooks.useReceivables.mockReturnValue({ data: [], ready: true, error: null })

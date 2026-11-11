@@ -17,6 +17,7 @@ import {
 import { billAppliesTo, buildEntry, missingEntries } from '../domain/bills'
 import { competenceOf } from '../domain/dates'
 import { addCharge, removeCharge, withPayment } from '../domain/receivables'
+import { normalizeRegistry, type Registry } from '../domain/registry'
 import type { NewBill, ReceivableImportPlan } from '../domain/transfer'
 import type { Bill, ChargeLog, Competence, Entry, Installment, IsoDate, Person, Receivable } from '../domain/types'
 import { db } from '../firebase'
@@ -32,6 +33,7 @@ const billsCol = (uid: string) => collection(database(), 'users', uid, 'bills')
 const entriesCol = (uid: string) => collection(database(), 'users', uid, 'entries')
 const peopleCol = (uid: string) => collection(database(), 'users', uid, 'people')
 const receivablesCol = (uid: string) => collection(database(), 'users', uid, 'receivables')
+const registryDoc = (uid: string) => doc(database(), 'users', uid, 'settings', 'registry')
 
 function withoutId<T extends { id: string }>(value: T): Data<T> {
   const { id: _id, ...rest } = value
@@ -291,6 +293,52 @@ export function deleteReceivable(uid: string, receivableId: string) {
 export function deletePerson(uid: string, personId: string, receivableIds: string[] = []): Promise<void> {
   const operations = receivableIds.map((id) => (batch: WriteBatch) => batch.delete(doc(receivablesCol(uid), id)))
   operations.push((batch) => batch.delete(doc(peopleCol(uid), personId)))
+  return commitInChunks(operations)
+}
+
+/* ---------- Cadastros (categorias, formas de pagamento, atalhos, fornecedores) ---------- */
+
+/** Os cadastros da pessoa. Enquanto ela não mudar nada o documento não existe e valem os padrões. */
+export function subscribeRegistry(
+  uid: string,
+  onData: (registry: Registry) => void,
+  onError: (error: Error) => void,
+): Unsubscribe {
+  return onSnapshot(registryDoc(uid), (snap) => onData(normalizeRegistry(snap.exists() ? snap.data() : undefined)), onError)
+}
+
+/** Grava os cadastros inteiros. */
+export function saveRegistry(uid: string, registry: Registry): Promise<void> {
+  return setDoc(registryDoc(uid), registry)
+}
+
+/**
+ * Passa as contas (e os lançamentos) de uma categoria para outra. Serve para renomear (a categoria nova
+ * é o nome novo) e para excluir (a categoria nova é a escolhida). Os cadastros são gravados no mesmo lote.
+ */
+export async function moveCategory(uid: string, from: string, to: string, registry: Registry): Promise<void> {
+  const [bills, entries] = await Promise.all([
+    getDocs(query(billsCol(uid), where('category', '==', from))),
+    getDocs(query(entriesCol(uid), where('category', '==', from))),
+  ])
+  const operations: ((batch: WriteBatch) => void)[] = [(batch) => batch.set(registryDoc(uid), registry)]
+  for (const d of [...bills.docs, ...entries.docs]) operations.push((batch) => batch.update(d.ref, { category: to }))
+  return commitInChunks(operations)
+}
+
+/** Passa as contas de uma forma de pagamento para outra (ao excluir a forma) e grava os cadastros. */
+export async function movePayment(uid: string, from: string, to: string, registry: Registry): Promise<void> {
+  const bills = await getDocs(query(billsCol(uid), where('paymentMethod', '==', from)))
+  const operations: ((batch: WriteBatch) => void)[] = [(batch) => batch.set(registryDoc(uid), registry)]
+  for (const d of bills.docs) operations.push((batch) => batch.update(d.ref, { paymentMethod: to }))
+  return commitInChunks(operations)
+}
+
+/** Troca o nome do fornecedor nas contas e grava os cadastros. */
+export async function renameSupplierInBills(uid: string, from: string, to: string, registry: Registry): Promise<void> {
+  const bills = await getDocs(query(billsCol(uid), where('supplier', '==', from)))
+  const operations: ((batch: WriteBatch) => void)[] = [(batch) => batch.set(registryDoc(uid), registry)]
+  for (const d of bills.docs) operations.push((batch) => batch.update(d.ref, { supplier: to }))
   return commitInChunks(operations)
 }
 

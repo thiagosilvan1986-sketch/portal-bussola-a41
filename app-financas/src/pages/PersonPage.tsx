@@ -474,8 +474,8 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
               <button className="link-btn" onClick={() => setEditing((v) => !v)}>
                 Valor/data
               </button>
-              <button className="check-btn" aria-label={`Dar baixa na ${label.toLowerCase()} (${receivable.description})`} onClick={quick}>
-                ✓
+              <button className="check-btn labeled" aria-label={`Dar baixa na ${label.toLowerCase()} (${receivable.description})`} onClick={quick}>
+                <span aria-hidden="true">✓</span> Dar baixa
               </button>
             </>
           )}

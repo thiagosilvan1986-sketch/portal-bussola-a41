@@ -22,7 +22,7 @@ const RECEIVE: Option = {
   tone: 'receive',
 }
 const IMPORT: Option = {
-  to: '/ajustes/planilhas',
+  to: '/cadastros/planilhas',
   title: 'Importar planilha',
   text: 'Traga várias contas ou recebimentos de uma vez, a partir de um arquivo CSV.',
   tone: 'neutral',
