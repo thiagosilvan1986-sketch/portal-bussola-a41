@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildInstallments, withPayment } from '../domain/receivables'
-import type { Person, Receivable } from '../domain/types'
+import type { Bill, Person, Receivable } from '../domain/types'
 
 const TODAY = '2026-11-09'
 const flat = (s: string | null) => (s ?? '').replace(/ /g, ' ')
@@ -35,7 +35,7 @@ const tenis = (): Receivable => ({
   notes: '',
 })
 
-const hooks = vi.hoisted(() => ({ usePeople: vi.fn(), useReceivables: vi.fn(), useToday: vi.fn() }))
+const hooks = vi.hoisted(() => ({ useBills: vi.fn(), usePeople: vi.fn(), useReceivables: vi.fn(), useToday: vi.fn() }))
 const store = vi.hoisted(() => ({
   createReceivable: vi.fn(),
   updateReceivable: vi.fn(),
@@ -75,6 +75,7 @@ function renderAt(path: string) {
 
 beforeEach(() => {
   hooks.useToday.mockReturnValue(TODAY)
+  hooks.useBills.mockReturnValue({ data: [], ready: true, error: null })
   setData([ana, bruno], [tenis()])
   store.createReceivable.mockReturnValue({ personId: 'pNovo', receivableId: 'r9', done: Promise.resolve() })
   for (const fn of [store.logCharge, store.updateReceivable, store.setInstallmentPayment, store.updatePerson, store.deleteReceivable, store.deletePerson, store.deleteChargeLog]) {
@@ -165,7 +166,7 @@ describe('nova compra parcelada', () => {
     fireEvent.change(screen.getByLabelText('Tom da cobrança'), { target: { value: 'profissional' } })
     fireEvent.click(screen.getByRole('radio', { name: /Serviço prestado/ }))
     fireEvent.change(screen.getByLabelText('Qual foi o serviço'), { target: { value: 'Consultoria' } })
-    fireEvent.change(screen.getByLabelText(/Valor total/), { target: { value: '500' } })
+    fireEvent.change(screen.getByLabelText(/Valor total/), { target: { value: '500,00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
     expect(store.createReceivable.mock.calls[0][1].person).toMatchObject({ name: 'Dr. Paulo', tone: 'profissional' })
   })
@@ -175,7 +176,7 @@ describe('nova compra parcelada', () => {
     expect((screen.getByRole('radio', { name: /Reembolso do cartão/ }) as HTMLInputElement).checked).toBe(true)
     fireEvent.click(screen.getByRole('radio', { name: /Serviço prestado/ }))
     fireEvent.change(screen.getByLabelText('Qual foi o serviço'), { target: { value: 'Pintura' } })
-    fireEvent.change(screen.getByLabelText(/Valor total/), { target: { value: '900' } })
+    fireEvent.change(screen.getByLabelText(/Valor total/), { target: { value: '900,00' } })
     fireEvent.change(screen.getByLabelText(/Nº de parcelas/), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
     expect(store.createReceivable.mock.calls[0][1].receivable).toMatchObject({ kind: 'servico', description: 'Pintura', totalCents: 90000 })
@@ -191,7 +192,7 @@ describe('nova compra parcelada', () => {
     renderAt('/receber/nova?pessoa=p1')
     expect((screen.getByLabelText('Quem vai pagar') as HTMLSelectElement).value).toBe('p1')
     fireEvent.change(screen.getByLabelText('O que foi'), { target: { value: 'Celular' } })
-    fireEvent.change(screen.getByLabelText(/Valor total/), { target: { value: '1200' } })
+    fireEvent.change(screen.getByLabelText(/Valor total/), { target: { value: '1200,00' } })
     fireEvent.change(screen.getByLabelText(/Nº de parcelas/), { target: { value: '12' } })
     fireEvent.change(screen.getByLabelText(/Vencimento da 1ª/), { target: { value: '2026-10-01' } })
     fireEvent.change(screen.getByLabelText('Parcelas já recebidas'), { target: { value: '1' } })
@@ -213,7 +214,7 @@ describe('nova compra parcelada', () => {
   ])('rejeita %s', (_nome, over, mensagem) => {
     setData([], [])
     renderAt('/receber/nova')
-    const v = { name: 'Dani', phone: '', email: '', total: '100', count: '2', received: '0', ...over }
+    const v = { name: 'Dani', phone: '', email: '', total: '100,00', count: '2', received: '0', ...over }
     fireEvent.change(screen.getByLabelText('Nome da pessoa'), { target: { value: v.name } })
     fireEvent.change(screen.getByLabelText(/Telefone/), { target: { value: v.phone } })
     fireEvent.change(screen.getByLabelText(/E-mail/), { target: { value: v.email } })
@@ -318,7 +319,7 @@ describe('histórico de cobranças', () => {
 describe('editar compra', () => {
   it('abre com os dados da compra e salva mantendo as baixas', () => {
     renderAt('/receber/compra/r1/editar')
-    expect(screen.getByRole('heading', { level: 1, name: 'Editar compra' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Editar reembolso do cartão' })).toBeTruthy()
     expect((screen.getByLabelText('O que foi') as HTMLInputElement).value).toBe('Tênis')
     expect((screen.getByLabelText(/Valor total/) as HTMLInputElement).value).toBe('420,00')
     expect((screen.getByLabelText(/Nº de parcelas/) as HTMLInputElement).value).toBe('10')
@@ -535,5 +536,206 @@ describe('página da pessoa', () => {
   it('avisa quando a pessoa não existe', () => {
     renderAt('/receber/pessoa/xx')
     expect(screen.getByText('Pessoa não encontrada.')).toBeTruthy()
+  })
+})
+
+describe('Copiar e criar novo', () => {
+  const fillLabel = (label: string | RegExp) => screen.getByLabelText(label) as HTMLInputElement
+
+  it('na edição da compra, leva ao cadastro novo; ele vem preenchido, sem as baixas, e nada é salvo antes de Salvar', () => {
+    renderAt('/receber/compra/r1/editar')
+    expect(screen.getByRole('link', { name: 'Copiar e criar novo' }).getAttribute('href')).toBe('/receber/nova?copiarCompra=r1')
+    cleanup()
+
+    renderAt('/receber/nova?copiarCompra=r1')
+    expect(screen.getByRole('heading', { level: 1, name: /Novo reembolso do cartão em 10x/ })).toBeTruthy()
+    expect(fillLabel('O que foi').value).toBe('Tênis (cópia)')
+    expect(fillLabel(/Valor total/).value).toBe('420,00')
+    expect(fillLabel('Nº de parcelas').value).toBe('10')
+    expect(fillLabel('Vencimento da 1ª parcela').value).toBe(TODAY) // a cópia começa hoje
+    expect((screen.getByLabelText('Quem vai pagar') as HTMLSelectElement).value).toBe('p1')
+    expect(fillLabel('Parcelas já recebidas').value).toBe('0') // a baixa da 1ª parcela não é copiada
+    expect(screen.getByText(/As baixas não são copiadas/)).toBeTruthy()
+    expect(store.createReceivable).not.toHaveBeenCalled()
+
+    fireEvent.submit(screen.getByRole('button', { name: 'Salvar' }).closest('form')!)
+    expect(store.createReceivable).toHaveBeenCalledTimes(1)
+    const { person, receivable } = store.createReceivable.mock.calls[0][1]
+    expect(person.id).toBe('p1')
+    expect(receivable).toMatchObject({ description: 'Tênis (cópia)', totalCents: 42000, installmentCount: 10, firstDueDate: TODAY })
+    expect(receivable.installments.every((i: { paidAt: string | null }) => i.paidAt === null)).toBe(true)
+  })
+
+  it('na edição do contato, leva ao cadastro de pessoa nova com os dados da pessoa e "(cópia)" no nome', () => {
+    renderAt('/receber/pessoa/p1')
+    fireEvent.click(screen.getByRole('button', { name: 'Editar contato' }))
+    expect(screen.getByRole('link', { name: 'Copiar e criar novo' }).getAttribute('href')).toBe('/receber/nova?copiarPessoa=p1')
+    cleanup()
+
+    renderAt('/receber/nova?copiarPessoa=p1')
+    expect((screen.getByLabelText('Quem vai pagar') as HTMLSelectElement).value).toBe('__new')
+    expect(fillLabel('Nome da pessoa').value).toBe('Ana Souza (cópia)')
+    expect(fillLabel(/Telefone/).value).toBe('(11) 98765-4321')
+    expect(fillLabel(/E-mail/).value).toBe('ana@exemplo.com')
+    expect(screen.getByText(/Cópia do contato de “Ana Souza”/)).toBeTruthy()
+    expect(store.createReceivable).not.toHaveBeenCalled()
+  })
+})
+
+describe('Refere-se à conta a pagar', () => {
+  const fatura: Bill = {
+    id: 'b1',
+    name: 'Cartão Nubank',
+    category: 'Cartão de crédito',
+    supplier: '',
+    valueType: 'variable',
+    expectedAmountCents: 100000,
+    dueDay: 10,
+    recurrence: 'monthly',
+    startMonth: '2026-01',
+    paymentMethod: 'cartao',
+    notes: '',
+    active: true,
+  }
+  const energia: Bill = { ...fatura, id: 'b2', name: 'Energia' }
+  const campo = 'Refere-se à conta a pagar (opcional)'
+  const live = <T,>(data: T[]) => ({ data, ready: true, error: null })
+
+  beforeEach(() => {
+    hooks.useBills.mockReturnValue(live([energia, fatura]))
+  })
+
+  it('só aparece para reembolso do cartão e quando há contas cadastradas', () => {
+    renderAt('/receber/nova?pessoa=p1')
+    const select = screen.getByLabelText(campo) as HTMLSelectElement
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Nenhuma', 'Cartão Nubank', 'Energia'])
+    fireEvent.click(screen.getByRole('radio', { name: /Serviço prestado/ }))
+    expect(screen.queryByLabelText(campo)).toBeNull()
+    cleanup()
+
+    hooks.useBills.mockReturnValue(live([]))
+    renderAt('/receber/nova?pessoa=p1')
+    expect(screen.queryByLabelText(campo)).toBeNull()
+  })
+
+  it('ligar a uma conta grava o vínculo; sem escolher, nada é gravado', () => {
+    renderAt('/receber/nova?pessoa=p1')
+    fireEvent.change(screen.getByLabelText('O que foi'), { target: { value: 'Celular' } })
+    fireEvent.change(screen.getByLabelText(/Valor total/), { target: { value: '500,00' } })
+    fireEvent.change(screen.getByLabelText(campo), { target: { value: 'b1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(store.createReceivable.mock.calls[0][1].receivable.billId).toBe('b1')
+    cleanup()
+    vi.clearAllMocks()
+    store.createReceivable.mockReturnValue({ personId: 'p1', receivableId: 'r9', done: Promise.resolve() })
+
+    renderAt('/receber/nova?pessoa=p1')
+    fireEvent.change(screen.getByLabelText('O que foi'), { target: { value: 'Celular' } })
+    fireEvent.change(screen.getByLabelText(/Valor total/), { target: { value: '500,00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(store.createReceivable.mock.calls[0][1].receivable).not.toHaveProperty('billId')
+  })
+
+  it('na edição mostra a conta ligada, permite trocar ou tirar a ligação, e a página da pessoa mostra a conta', () => {
+    const ligada = { ...tenis(), billId: 'b1' }
+    setData([ana, bruno], [ligada])
+    renderAt('/receber/pessoa/p1')
+    expect(screen.getByText('Refere-se à conta a pagar: Cartão Nubank')).toBeTruthy()
+    cleanup()
+
+    renderAt('/receber/compra/r1/editar')
+    const select = screen.getByLabelText(campo) as HTMLSelectElement
+    expect(select.value).toBe('b1')
+    fireEvent.change(select, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }))
+    expect(store.updateReceivable.mock.calls[0][1].billId).toBeNull()
+  })
+
+  it('a cópia da compra mantém a ligação', () => {
+    setData([ana, bruno], [{ ...tenis(), billId: 'b2' }])
+    renderAt('/receber/nova?copiarCompra=r1')
+    expect((screen.getByLabelText(campo) as HTMLSelectElement).value).toBe('b2')
+  })
+})
+
+describe('Contato da agenda', () => {
+  const vcf = (text: string) => new File([text], 'contato.vcf', { type: 'text/vcard' })
+  const cartao = 'BEGIN:VCARD\nVERSION:3.0\nFN:Ana Maria Souza\nTEL;type=CELL:+55 11 98765-4321\nEMAIL:ana.maria@exemplo.com\nEND:VCARD'
+  const upload = (text: string) =>
+    fireEvent.change(screen.getByLabelText('Arquivo de contato (.vcf)'), { target: { files: [vcf(text)] } })
+  const field = (label: string | RegExp) => screen.getByLabelText(label) as HTMLInputElement
+
+  afterEach(() => {
+    delete (navigator as unknown as { contacts?: unknown }).contacts
+    delete (window as unknown as { ContactsManager?: unknown }).ContactsManager
+  })
+
+  it('pessoa nova: importar um arquivo .vcf preenche nome, telefone e e-mail, e o iPhone recebe o passo a passo', async () => {
+    setData([], [])
+    renderAt('/receber/nova')
+    expect(screen.queryByRole('button', { name: 'Escolher da agenda do celular' })).toBeNull()
+    expect(screen.getByText(/No iPhone: abra o contato/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Importar contato (.vcf)' })).toBeTruthy()
+
+    upload(cartao)
+    await waitFor(() => expect(field('Nome da pessoa').value).toBe('Ana Maria Souza'))
+    expect(field(/Telefone/).value).toBe('(11) 98765-4321')
+    expect(field(/E-mail/).value).toBe('ana.maria@exemplo.com')
+    expect(screen.getByRole('status').textContent).toContain('Confira os dados antes de salvar')
+    // digitar continua valendo
+    fireEvent.change(field('Nome da pessoa'), { target: { value: 'Ana' } })
+    expect(field('Nome da pessoa').value).toBe('Ana')
+  })
+
+  it('arquivo sem contato mostra o aviso e não mexe nos campos', async () => {
+    setData([], [])
+    renderAt('/receber/nova')
+    fireEvent.change(field('Nome da pessoa'), { target: { value: 'Dani' } })
+    upload('isto não é um contato')
+    expect((await screen.findByRole('alert')).textContent).toContain('Não encontrei nenhum contato')
+    expect(field('Nome da pessoa').value).toBe('Dani')
+  })
+
+  it('arquivo com vários contatos usa o primeiro e avisa', async () => {
+    setData([], [])
+    renderAt('/receber/nova')
+    upload(`${cartao}\nBEGIN:VCARD\nFN:Bruno\nEND:VCARD`)
+    await waitFor(() => expect(field('Nome da pessoa').value).toBe('Ana Maria Souza'))
+    expect(screen.getByRole('status').textContent).toContain('O arquivo tem 2 contatos; usei o primeiro')
+  })
+
+  it('no Android, o botão da agenda do celular abre o seletor e preenche os campos', async () => {
+    const select = vi.fn().mockResolvedValue([{ name: ['Bia Lima'], tel: ['11 91234-5678'], email: ['bia@exemplo.com'] }])
+    ;(navigator as unknown as { contacts: unknown }).contacts = { select }
+    ;(window as unknown as { ContactsManager: unknown }).ContactsManager = class {}
+    setData([], [])
+    renderAt('/receber/nova')
+    expect(screen.queryByText(/No iPhone: abra o contato/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
+    await waitFor(() => expect(field('Nome da pessoa').value).toBe('Bia Lima'))
+    expect(select).toHaveBeenCalledWith(['name', 'tel', 'email'], { multiple: false })
+    expect(field(/Telefone/).value).toBe('(11) 91234-5678')
+    expect(field(/E-mail/).value).toBe('bia@exemplo.com')
+  })
+
+  it('fechar o seletor sem escolher não muda nada', async () => {
+    ;(navigator as unknown as { contacts: unknown }).contacts = { select: vi.fn().mockResolvedValue([]) }
+    ;(window as unknown as { ContactsManager: unknown }).ContactsManager = class {}
+    setData([], [])
+    renderAt('/receber/nova')
+    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
+    await waitFor(() => expect((navigator as unknown as { contacts: { select: ReturnType<typeof vi.fn> } }).contacts.select).toHaveBeenCalled())
+    expect(field('Nome da pessoa').value).toBe('')
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('na edição do contato da pessoa também dá para importar', async () => {
+    renderAt('/receber/pessoa/p2')
+    fireEvent.click(screen.getByRole('button', { name: 'Editar contato' }))
+    upload(cartao)
+    await waitFor(() => expect(field('Nome').value).toBe('Ana Maria Souza'))
+    expect(field(/Telefone/).value).toBe('(11) 98765-4321')
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }))
+    expect(store.updatePerson).toHaveBeenCalledWith('u1', expect.objectContaining({ id: 'p2', name: 'Ana Maria Souza', phone: '11987654321', email: 'ana.maria@exemplo.com' }))
   })
 })

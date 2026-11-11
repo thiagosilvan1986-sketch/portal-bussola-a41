@@ -2,7 +2,7 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
   {
     icon: 'M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zm4 9 2 2 4-4',
     title: 'Nenhuma conta esquecida',
-    text: 'Cadastre uma vez. O app lança todo mês e destaca o que vence hoje e o que atrasou.',
+    text: 'Cadastre uma vez. O app lança todo mês e destaca o que vence hoje e o que atrasou. Conta com fim, como financiamento ou consórcio? Informe as parcelas e o começo: o app mostra “Parcela 3 de 10” e para sozinho depois da última.',
   },
   {
     icon: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm-4-9 3 3 5-6',
@@ -13,6 +13,11 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
     icon: 'M12 4v11m0 0-4-4m4 4 4-4M5 20h14',
     title: 'Quem te deve, na ponta do lápis',
     text: 'Reembolsos do cartão e serviços prestados, parcela a parcela, com a previsão do que volta a cada mês.',
+  },
+  {
+    icon: 'M12 3v18M5 7h14M5 7l-3 7a3 3 0 0 0 6 0L5 7zm14 0-3 7a3 3 0 0 0 6 0l-3-7z',
+    title: 'Seu gasto real',
+    text: 'Ligue o reembolso do cartão à conta que você pagou. Pagou R$ 1.000 e vai receber R$ 500? O app mostra que o seu gasto de verdade foi R$ 500, na conta e nos relatórios (Bruto ou Real).',
   },
   {
     icon: 'M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.2A8 8 0 1 1 21 12z',
@@ -30,6 +35,11 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
     text: 'Importe contas e compras de um CSV do Excel ou Google Planilhas, com prévia antes de gravar. E exporte tudo quando quiser.',
   },
   {
+    icon: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-8 9a8 8 0 0 1 16 0',
+    title: 'Contato sem digitar',
+    text: 'Ao cadastrar uma pessoa, traga nome, telefone e e-mail direto da agenda do celular (Android) ou de um arquivo de contato .vcf (iPhone).',
+  },
+  {
     icon: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zm10-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
     title: 'Privacidade num toque',
     text: 'O olhinho no topo esconde todos os valores quando tem gente por perto. O app lembra a sua escolha.',
@@ -43,6 +53,16 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
     icon: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4.500v5M9 14.500v5',
     title: 'Do seu jeito',
     text: 'Em Cadastros, crie e mude categorias, formas de pagamento, atalhos de conta e fornecedores. Renomear atualiza tudo o que já existe.',
+  },
+  {
+    icon: 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
+    title: 'Copiar e criar novo',
+    text: 'Um toque cria outro cadastro igual, só para ajustar: conta, compra a receber, pessoa, atalho, categoria, forma de pagamento ou fornecedor.',
+  },
+  {
+    icon: 'M4 7h16v10H4zM8 11h.01M12 11h.01M16 11h.01M8 14h8',
+    title: 'Digitou, o app arruma',
+    text: 'Os valores já entram com vírgula e pontos (digite 9606 e vira 96,06). E, ao escrever o nome de uma conta que você já tem, o app sugere a categoria.',
   },
   {
     icon: 'M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7zm4 10a2 2 0 0 0 4 0',

@@ -14,7 +14,7 @@ export const STATUS_ICON: Record<DisplayStatus, string> = {
 /** Status sempre em texto além da cor (acessibilidade). */
 export function StatusChip({ status }: { status: DisplayStatus }) {
   return (
-    <span className={`chip chip-${status}`}>
+    <span className={`chip chip-${status} status-chip`}>
       <span aria-hidden="true">{STATUS_ICON[status]} </span>
       {STATUS_LABEL[status]}
     </span>

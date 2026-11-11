@@ -330,10 +330,9 @@ describe('Atalhos de conta', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar atalho' }))
     expect(screen.getByRole('alert').textContent).toBe('Já existe “gas”.')
     fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Outro' } })
+    // a máscara só aceita números: letras não entram no campo de valor
     fireEvent.change(screen.getByLabelText('Valor (opcional)'), { target: { value: 'abc' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar atalho' }))
-    expect(screen.getByRole('alert').textContent).toContain('valor válido')
-    fireEvent.change(screen.getByLabelText('Valor (opcional)'), { target: { value: '' } })
+    expect((screen.getByLabelText('Valor (opcional)') as HTMLInputElement).value).toBe('')
     fireEvent.change(screen.getByLabelText('Dia do vencimento (opcional)'), { target: { value: '45' } })
     fireEvent.click(screen.getByRole('button', { name: 'Salvar atalho' }))
     expect(screen.getByRole('alert').textContent).toContain('1 a 31')
@@ -445,5 +444,86 @@ describe('Sobre', () => {
     for (const f of FEATURES) expect(box.getByText(f.title)).toBeTruthy()
     expect(box.getByText('Do seu jeito')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Instalar no celular' })).toBeTruthy()
+  })
+})
+
+describe('Copiar e criar novo', () => {
+  it('nas listas (categoria, forma de pagamento), cria na hora "Nome (cópia)"', async () => {
+    renderAt('/cadastros/categorias')
+    fireEvent.click(within(row('Pets')).getByRole('button', { name: 'Copiar e criar novo' }))
+    await waitFor(() => expect(store.saveRegistry).toHaveBeenCalled())
+    expect(lastSaved().categories).toContain('Pets (cópia)')
+    expect(lastSaved().categories).toContain('Pets')
+    cleanup()
+    vi.clearAllMocks()
+
+    renderAt('/cadastros/pagamentos')
+    fireEvent.click(within(row('PIX')).getByRole('button', { name: 'Copiar e criar novo' }))
+    await waitFor(() => expect(store.saveRegistry).toHaveBeenCalled())
+    expect(lastSaved().payments.map((p) => p.label)).toContain('PIX (cópia)')
+  })
+
+  it('a categoria padrão do app não tem o botão de copiar', () => {
+    renderAt('/cadastros/categorias')
+    expect(within(row('Outros')).queryByRole('button', { name: 'Copiar e criar novo' })).toBeNull()
+  })
+
+  it('na edição da conta, leva ao cadastro novo já preenchido, com "(cópia)" no nome; nada é salvo antes de Salvar', async () => {
+    renderAt('/contas/b1')
+    expect(screen.getByRole('link', { name: 'Copiar e criar novo' }).getAttribute('href')).toBe('/contas/nova?copiar=b1')
+    cleanup()
+
+    renderAt('/contas/nova?copiar=b1')
+    expect(screen.getByRole('heading', { level: 1, name: 'Nova conta' })).toBeTruthy()
+    expect((screen.getByLabelText('Nome') as HTMLInputElement).value).toBe('Ração (cópia)')
+    expect((screen.getByLabelText(/Valor/) as HTMLInputElement).value).toBe('80,00')
+    expect((screen.getByLabelText('Categoria') as HTMLSelectElement).value).toBe('Pets')
+    expect((screen.getByLabelText(/Fornecedor/) as HTMLInputElement).value).toBe('Petz')
+    expect((screen.getByLabelText('Dia do vencimento') as HTMLInputElement).value).toBe('5')
+    expect(screen.getByText(/Cópia de “Ração”/)).toBeTruthy()
+    expect(store.saveBill).not.toHaveBeenCalled()
+
+    fireEvent.submit(screen.getByRole('button', { name: 'Salvar' }).closest('form')!)
+    await waitFor(() => expect(store.saveBill).toHaveBeenCalled())
+    const [, input] = store.saveBill.mock.calls[0]
+    expect(input.id).toBeUndefined()
+    expect(input).toMatchObject({ name: 'Ração (cópia)', expectedAmountCents: 8000, category: 'Pets', supplier: 'Petz', active: true })
+  })
+
+  it('copiar uma conta parcelada leva o número de parcelas, começa neste mês e não copia o que já foi pago', () => {
+    setup(defaultRegistry(), [bill({ name: 'Moto', startMonth: '2026-01', installmentCount: 10 })])
+    renderAt('/contas/nova?copiar=b1')
+    expect((screen.getByLabelText(/Número de parcelas/) as HTMLInputElement).value).toBe('10')
+    expect((screen.getByLabelText('Começa em') as HTMLInputElement).value).toBe('2026-11')
+    expect((screen.getByLabelText(/Termina em/) as HTMLInputElement).value).toBe('2027-08')
+    expect((screen.getByLabelText('Parcelas já pagas') as HTMLInputElement).value).toBe('0')
+  })
+
+  it('copiar de uma conta que não existe abre o cadastro em branco', () => {
+    renderAt('/contas/nova?copiar=nada')
+    expect((screen.getByLabelText('Nome') as HTMLInputElement).value).toBe('')
+  })
+
+  it('no atalho: o botão aparece só na edição e o novo atalho vem preenchido', async () => {
+    const reg = defaultRegistry()
+    reg.templates = [{ id: 'x1', name: 'Clube', category: 'Lazer', amountCents: 15000, dueDay: 10, recurrence: 'monthly', valueType: 'fixed', paymentMethod: 'pix', supplier: 'Clube X', installmentCount: 12 }]
+    setup(reg)
+    renderAt('/cadastros/atalhos/x1')
+    expect(screen.getByRole('link', { name: 'Copiar e criar novo' }).getAttribute('href')).toBe('/cadastros/atalhos/novo?copiar=x1')
+    cleanup()
+
+    renderAt('/cadastros/atalhos/novo')
+    expect(screen.queryByRole('link', { name: 'Copiar e criar novo' })).toBeNull()
+    cleanup()
+
+    renderAt('/cadastros/atalhos/novo?copiar=x1')
+    expect(screen.getByRole('heading', { level: 1, name: 'Novo atalho' })).toBeTruthy()
+    expect((screen.getByLabelText('Nome') as HTMLInputElement).value).toBe('Clube (cópia)')
+    expect((screen.getByLabelText(/Valor/) as HTMLInputElement).value).toBe('150,00')
+    expect((screen.getByLabelText(/Número de parcelas/) as HTMLInputElement).value).toBe('12')
+    expect(store.saveRegistry).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar atalho' }))
+    await waitFor(() => expect(store.saveRegistry).toHaveBeenCalled())
+    expect(lastSaved().templates.map((t) => t.name)).toEqual(['Clube', 'Clube (cópia)'])
   })
 })

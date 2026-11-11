@@ -281,7 +281,35 @@ describe('contas a pagar (CSV)', () => {
     const plan = parseBillsCsv(billsTemplateCsv(), [], TODAY)
     expect(plan.errors).toEqual([])
     expect(plan.fileError).toBeNull()
-    expect(plan.bills).toHaveLength(2)
+    expect(plan.bills).toHaveLength(3)
+    expect(plan.bills[2]).toMatchObject({ name: 'Parcela do carro', installmentCount: 48, paidInstallments: 10 })
+    expect(plan.bills[0]).not.toHaveProperty('installmentCount')
+  })
+
+  it('conta parcelada: exporta o número de parcelas e importa de volta', () => {
+    const financiamento: Bill = { ...luz, name: 'Financiamento', startMonth: '2026-09', installmentCount: 10 }
+    const csv = billsToCsv([financiamento])
+    expect(csv).toContain('Parcelas')
+    const plan = parseBillsCsv(csv, [], TODAY)
+    expect(plan.errors).toEqual([])
+    expect(plan.bills[0]).toMatchObject({ name: 'Financiamento', installmentCount: 10 })
+    // começou em setembro e hoje é novembro: set e out já venceram sem pagamento
+    expect(plan.warnings[0].message).toContain('2 parcelas já venceram sem pagamento e entram como atrasadas')
+  })
+
+  it('parcelas pagas: valida contra o número de parcelas e as que já venceram', () => {
+    const header = 'Nome;Valor;Dia do vencimento;Início;Parcelas;Parcelas pagas\n'
+    const ok = parseBillsCsv(`${header}Carro;900;10;09/2026;10;2\n`, [], TODAY)
+    expect(ok.errors).toEqual([])
+    expect(ok.warnings).toEqual([])
+    expect(ok.bills[0]).toMatchObject({ installmentCount: 10, paidInstallments: 2 })
+
+    const tooMany = parseBillsCsv(`${header}Carro;900;10;09/2026;10;5\n`, [], TODAY)
+    expect(tooMany.errors[0].message).toContain('parcelas pagas (5) não pode passar de 3')
+    const withoutCount = parseBillsCsv(`${header}Carro;900;10;09/2026;;2\n`, [], TODAY)
+    expect(withoutCount.errors[0].message).toContain('informe o número de parcelas')
+    const badCount = parseBillsCsv(`${header}Carro;900;10;09/2026;abc;\n`, [], TODAY)
+    expect(badCount.errors[0].message).toContain('parcelas “abc” deve ser um número de 1 a 360')
   })
 
   it('texto com fórmula sobrevive à ida e volta', () => {

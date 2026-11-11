@@ -257,8 +257,8 @@ export default function DataTransfer() {
         makeTemplate={billsTemplateCsv}
         analyze={(text) => parseBillsCsv(text, bills.data, today, registry)}
         readyCount={(plan) => plan.bills.length}
-        save={(plan) => importBills(uid, plan.bills)}
-        goTo={{ to: '/contas', label: 'Ver contas' }}
+        save={(plan) => importBills(uid, plan.bills, today)}
+        goTo={{ to: '/contas', label: 'Ver contas a pagar' }}
       />
 
       <TransferCard

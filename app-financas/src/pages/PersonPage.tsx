@@ -2,13 +2,16 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { ChargeSheet } from '../components/ChargeSheet'
+import { ContactImport } from '../components/ContactImport'
+import { CopyButton } from '../components/CopyButton'
 import { DeleteButton } from '../components/DeleteButton'
 import { StatusChip } from '../components/StatusChip'
-import { usePeople, useReceivables, useToday } from '../data/hooks'
+import { useBills, usePeople, useReceivables, useToday } from '../data/hooks'
 import { deleteChargeLog, deletePerson, deleteReceivable, logCharge, setInstallmentPayment, updatePerson } from '../data/store'
 import { formatDateBR } from '../domain/dates'
 import { useMoney } from '../data/privacy'
 import { centsToInput, parseBRLToCents } from '../domain/money'
+import { MoneyInput } from '../components/MoneyInput'
 import {
   CHANNEL_LABEL,
   KIND_INFO,
@@ -38,6 +41,7 @@ export default function PersonPage() {
   const today = useToday()
   const people = usePeople(uid)
   const receivables = useReceivables(uid)
+  const bills = useBills(uid)
 
   if (!people.ready || !receivables.ready) {
     return (
@@ -58,10 +62,22 @@ export default function PersonPage() {
     )
   }
   const mine = receivables.data.filter((r) => r.personId === person.id)
-  return <Detail key={person.id} uid={uid} today={today} person={person} receivables={mine} />
+  return <Detail key={person.id} uid={uid} today={today} person={person} receivables={mine} billNames={new Map(bills.data.map((b) => [b.id, b.name]))} />
 }
 
-function Detail({ uid, today, person, receivables }: { uid: string; today: IsoDate; person: Person; receivables: Receivable[] }) {
+function Detail({
+  uid,
+  today,
+  person,
+  receivables,
+  billNames,
+}: {
+  uid: string
+  today: IsoDate
+  person: Person
+  receivables: Receivable[]
+  billNames: ReadonlyMap<string, string>
+}) {
   const navigate = useNavigate()
   const [editingContact, setEditingContact] = useState(false)
   const [charging, setCharging] = useState<Receivable[] | null>(null)
@@ -111,6 +127,7 @@ function Detail({ uid, today, person, receivables }: { uid: string; today: IsoDa
             newPurchasePath={`/receber/nova?pessoa=${person.id}&tipo=${kind}`}
             showNewPurchase={idx === 0}
             receivables={ofKind(receivables, kind)}
+            billNames={billNames}
             onCharge={setCharging}
           />
         ))
@@ -168,6 +185,7 @@ function KindSection({
   newPurchasePath,
   showNewPurchase,
   receivables,
+  billNames,
   onCharge,
 }: {
   uid: string
@@ -178,6 +196,7 @@ function KindSection({
   newPurchasePath: string
   showNewPurchase: boolean
   receivables: Receivable[]
+  billNames: ReadonlyMap<string, string>
   onCharge: (list: Receivable[]) => void
 }) {
   const money = useMoney()
@@ -248,7 +267,7 @@ function KindSection({
       </div>
 
       {sorted.map((r) => (
-        <Purchase key={r.id} uid={uid} today={today} receivable={r} onCharge={() => onCharge([r])} />
+        <Purchase key={r.id} uid={uid} today={today} receivable={r} billName={r.billId ? billNames.get(r.billId) : undefined} onCharge={() => onCharge([r])} />
       ))}
     </section>
   )
@@ -340,6 +359,13 @@ function Contact({
   return (
     <form className="card stack" onSubmit={save} aria-label="Editar contato" noValidate>
       <h2>Editar contato</h2>
+      <ContactImport
+        onPick={(c) => {
+          if (c.name) setName(c.name)
+          if (c.phone) setPhone(c.phone)
+          if (c.email) setEmail(c.email)
+        }}
+      />
       <label>
         Nome
         <input value={name} onChange={(e) => setName(e.target.value)} />
@@ -368,15 +394,28 @@ function Contact({
         <button className="btn primary" type="submit">
           Salvar contato
         </button>
-        <button className="btn" type="button" onClick={() => setEditing(false)}>
-          Cancelar
+        <button className="btn primary cancel-btn" type="button" onClick={() => setEditing(false)}>
+          <span aria-hidden="true">✕</span> Cancelar
         </button>
       </div>
+      <CopyButton to={`/receber/nova?copiarPessoa=${person.id}`} />
     </form>
   )
 }
 
-function Purchase({ uid, today, receivable, onCharge }: { uid: string; today: IsoDate; receivable: Receivable; onCharge: () => void }) {
+function Purchase({
+  uid,
+  today,
+  receivable,
+  billName,
+  onCharge,
+}: {
+  uid: string
+  today: IsoDate
+  receivable: Receivable
+  billName?: string
+  onCharge: () => void
+}) {
   const money = useMoney()
   const s = summarizeReceivable(receivable, today)
   const pct = s.count === 0 ? 0 : Math.round((s.settledCount / s.count) * 100)
@@ -395,6 +434,7 @@ function Purchase({ uid, today, receivable, onCharge }: { uid: string; today: Is
       <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Parcelas recebidas">
         <div className="progress-fill" style={{ width: `${pct}%` }} />
       </div>
+      {billName && <p className="muted">Refere-se à conta a pagar: {billName}</p>}
       {receivable.notes && <p className="muted">{receivable.notes}</p>}
 
       <details open={s.remainingCents > 0 && s.count <= 12}>
@@ -486,7 +526,7 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
           <div className="row">
             <label>
               Valor recebido
-              <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+              <MoneyInput value={amount} onChange={setAmount} />
             </label>
             <label>
               Data

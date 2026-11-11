@@ -1,21 +1,32 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { useBills, useRegistry, useToday } from '../data/hooks'
+import { useBills, useReceivables, useRegistry, useToday } from '../data/hooks'
+import { CopyButton } from '../components/CopyButton'
 import { DeleteButton } from '../components/DeleteButton'
 import { restoreMonth, deleteBill, saveBill } from '../data/store'
 import { settleWithin } from '../data/wait'
-import { RECURRENCE_LABEL } from '../domain/bills'
-import { competenceOf, formatCompetence } from '../domain/dates'
+import { MAX_BILL_INSTALLMENTS, RECURRENCE_LABEL, RECURRENCE_STEP, endCompetence, installmentsUntil } from '../domain/bills'
+import { addMonths, competenceOf, formatCompetence } from '../domain/dates'
+import { receivablesOfBill } from '../domain/linked'
 import { centsToInput, parseBRLToCents } from '../domain/money'
-import { FALLBACK_CATEGORY, availableTemplates, supplierSuggestions, type Template } from '../domain/registry'
+import { MoneyInput } from '../components/MoneyInput'
+import { FALLBACK_CATEGORY, MAX_TEMPLATE_NAME, availableTemplates, copyName, suggestCategory, supplierSuggestions, type Template } from '../domain/registry'
 import type { Bill, PaymentMethod, Recurrence, ValueType } from '../domain/types'
 
 export default function BillForm() {
   const { id } = useParams()
   const uid = useAuth().user!.uid
   const bills = useBills(uid)
+  const [params] = useSearchParams()
+  const copyId = params.get('copiar')
 
+  if (!id && copyId) {
+    // "Copiar e criar novo": o cadastro novo já vem preenchido com o da conta copiada. Nada é salvo até tocar em Salvar.
+    if (!bills.ready) return <main className="page"><p className="muted center-text">Carregando…</p></main>
+    const source = bills.data.find((b) => b.id === copyId)
+    return <Editor key={`copia-${copyId}`} initial={null} seed={source ?? null} bills={bills.data} />
+  }
   if (!id) return <Editor initial={null} bills={bills.data} />
   if (!bills.ready) return <main className="page"><p className="muted center-text">Carregando…</p></main>
   const bill = bills.data.find((b) => b.id === id)
@@ -32,22 +43,35 @@ export default function BillForm() {
   return <Editor key={bill.id} initial={bill} bills={bills.data} />
 }
 
-function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
+function Editor({ initial, seed = null, bills }: { initial: Bill | null; seed?: Bill | null; bills: Bill[] }) {
   const navigate = useNavigate()
   const uid = useAuth().user!.uid
   const today = useToday()
   const registry = useRegistry(uid).data
+  // Compras a receber que se referem a esta conta: ao excluí-la, elas continuam cadastradas, mas perdem a ligação.
+  const receivables = useReceivables(uid).data
+  const linkedPurchases = initial ? receivablesOfBill(initial.id, receivables) : []
 
-  const [name, setName] = useState(initial?.name ?? '')
-  const [category, setCategory] = useState(initial?.category ?? FALLBACK_CATEGORY)
-  const [supplier, setSupplier] = useState(initial?.supplier ?? '')
-  const [valueType, setValueType] = useState<ValueType>(initial?.valueType ?? 'fixed')
-  const [amount, setAmount] = useState(initial ? centsToInput(initial.expectedAmountCents) : '')
-  const [dueDay, setDueDay] = useState(String(initial?.dueDay ?? ''))
-  const [recurrence, setRecurrence] = useState<Recurrence>(initial?.recurrence ?? 'monthly')
-  const [startMonth, setStartMonth] = useState(initial?.startMonth ?? competenceOf(today))
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initial?.paymentMethod ?? registry.payments[0].id)
-  const [notes, setNotes] = useState(initial?.notes ?? '')
+  // Numa cópia, tudo vem da conta copiada (menos as parcelas pagas e os meses excluídos, que são só dela).
+  const base = initial ?? seed
+  const [name, setName] = useState(initial ? initial.name : seed ? copyName(seed.name, bills.map((b) => b.name), MAX_TEMPLATE_NAME) : '')
+  const [category, setCategory] = useState(base?.category ?? FALLBACK_CATEGORY)
+  // Conta nova: o nome de uma conta que a pessoa já tem (ou de um atalho) escolhe a categoria sozinho, até ela mexer na categoria.
+  const [categoryTouched, setCategoryTouched] = useState(Boolean(seed))
+  const [categorySuggested, setCategorySuggested] = useState(false)
+  const [supplier, setSupplier] = useState(base?.supplier ?? '')
+  const [valueType, setValueType] = useState<ValueType>(base?.valueType ?? 'fixed')
+  const [amount, setAmount] = useState(base ? centsToInput(base.expectedAmountCents) : '')
+  const [dueDay, setDueDay] = useState(String(base?.dueDay ?? ''))
+  const [recurrence, setRecurrence] = useState<Recurrence>(base?.recurrence ?? 'monthly')
+  // A cópia de uma conta parcelada começa neste mês: copiar um financiamento antigo não deve gerar parcelas atrasadas.
+  const [startMonth, setStartMonth] = useState(initial ? initial.startMonth : seed ? (seed.installmentCount ? competenceOf(today) : seed.startMonth) : competenceOf(today))
+  // Parcelas: o número é a âncora; "Termina em" é calculado a partir dele (ou calcula o número, se a pessoa preencher o fim).
+  const [count, setCount] = useState(base?.installmentCount ? String(base.installmentCount) : '')
+  const [endDraft, setEndDraft] = useState('')
+  const [paidCount, setPaidCount] = useState('0')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(base?.paymentMethod ?? registry.payments[0].id)
+  const [notes, setNotes] = useState(base?.notes ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const skipped = [...(initial?.skippedMonths ?? [])].sort().reverse()
@@ -57,11 +81,57 @@ function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
   const shortcuts = initial ? [] : availableTemplates(registry.templates, bills)
   const suppliers = supplierSuggestions(registry, bills)
 
+  const startValid = /^\d{4}-(0[1-9]|1[0-2])$/.test(startMonth)
+  const countNumber = Number(count)
+  const countValid = count !== '' && Number.isInteger(countNumber) && countNumber >= 1 && countNumber <= MAX_BILL_INSTALLMENTS
+  const endValue = countValid && startValid ? endCompetence(startMonth, recurrence, countNumber) : endDraft
+  const thisMonth = competenceOf(today)
+  // Parcelas que já tinham vencido até hoje (de "Começa em" até o mês atual) e quantas dessas ainda estão em aberto.
+  const elapsed = countValid && startValid ? Math.min(countNumber, installmentsUntil(startMonth, thisMonth, recurrence) ?? 0) : 0
+  const maxPaid = Math.min(Math.max(countNumber - 1, 0), elapsed)
+  const paid = Math.min(Number(paidCount || '0'), maxPaid)
+  const elapsedBefore = countValid && startValid ? Math.min(countNumber, installmentsUntil(startMonth, addMonths(thisMonth, -1), recurrence) ?? 0) : 0
+  const overdueOnCreate = initial ? 0 : Math.max(0, elapsedBefore - paid)
+
+  function onCountChange(text: string) {
+    setCount(text.replace(/\D/g, '').slice(0, 3))
+    setEndDraft('')
+  }
+
+  function onEndChange(value: string) {
+    setEndDraft(value)
+    if (!value) return setCount('')
+    const k = startValid ? installmentsUntil(startMonth, value, recurrence) : null
+    setCount(k !== null && k <= MAX_BILL_INSTALLMENTS ? String(k) : '')
+  }
+
+  /** Mudar o começo ou a repetição mantém o número de parcelas e move o fim; se só o fim estava preenchido, recalcula o número. */
+  function onScheduleChange(start: string, rec: Recurrence) {
+    setStartMonth(start)
+    setRecurrence(rec)
+    if (!countValid && endDraft && /^\d{4}-(0[1-9]|1[0-2])$/.test(start)) {
+      const k = installmentsUntil(start, endDraft, rec)
+      if (k !== null && k <= MAX_BILL_INSTALLMENTS) setCount(String(k))
+    }
+  }
+
+  function onNameChange(text: string) {
+    setName(text)
+    if (initial) return
+    const suggestion = categoryTouched ? null : suggestCategory(registry, bills, text)
+    if (suggestion) setCategory(suggestion)
+    setCategorySuggested(suggestion !== null)
+  }
+
   function applyTemplate(t: Template) {
+    setCategoryTouched(false)
+    setCategorySuggested(false)
     setName(t.name)
     setCategory(registry.categories.includes(t.category) ? t.category : FALLBACK_CATEGORY)
     setValueType(t.valueType)
     setRecurrence(t.recurrence)
+    setCount(t.installmentCount ? String(t.installmentCount) : '')
+    setEndDraft('')
     setPaymentMethod(registry.payments.some((p) => p.id === t.paymentMethod) ? t.paymentMethod : registry.payments[0].id)
     setSupplier(t.supplier)
     if (t.amountCents > 0) setAmount(centsToInput(t.amountCents))
@@ -75,7 +145,9 @@ function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
     if (cents === null) return setError('Informe um valor válido. Exemplo: 238,40')
     if (valueType === 'fixed' && cents === 0) return setError('Para valor fixo, informe um valor maior que zero.')
     if (!Number.isInteger(day) || day < 1 || day > 31) return setError('O dia de vencimento deve ser de 1 a 31.')
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(startMonth)) return setError('Informe o mês de início.')
+    if (!startValid) return setError('Informe o mês de início.')
+    if (count !== '' && !countValid) return setError(`O número de parcelas deve ser de 1 a ${MAX_BILL_INSTALLMENTS}.`)
+    if (count === '' && endDraft) return setError('O mês em que a conta termina não pode ser antes do mês em que ela começa.')
 
     setError(null)
     setSaving(true)
@@ -95,8 +167,10 @@ function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
           paymentMethod,
           notes: notes.trim(),
           active,
+          installmentCount: countValid ? countNumber : null,
         },
         today,
+        initial ? {} : { paidInstallments: paid },
       )
       navigate('/contas')
     } catch (e) {
@@ -134,12 +208,14 @@ function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
     <main className="page">
       <header className="page-head">
         <h1>{initial ? 'Editar conta' : 'Nova conta'}</h1>
-        <Link className="link-btn" to="/contas">
-          Cancelar
+        <Link className="btn primary cancel-btn" to="/contas">
+          <span aria-hidden="true">✕</span> Cancelar
         </Link>
       </header>
 
-      {!initial && (
+      {seed && <p className="muted copy-note">Cópia de “{seed.name}”. Nada é salvo até você tocar em Salvar.</p>}
+
+      {!initial && !seed && (
         <div className="chips chips-scroll" role="group" aria-label="Atalhos">
           {shortcuts.map((t) => (
             <button key={t.id} type="button" className="chip-btn" onClick={() => applyTemplate(t)}>
@@ -155,13 +231,13 @@ function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
       <form className="stack card" onSubmit={onSubmit}>
         <label>
           Nome
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Energia elétrica" required />
+          <input value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="Ex.: Energia elétrica" required />
         </label>
 
         <div className="row">
           <label>
             Valor {valueType === 'fixed' ? 'fixo' : 'estimado'}
-            <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" required />
+            <MoneyInput value={amount} onChange={setAmount} placeholder="0,00" required />
           </label>
           <label>
             Dia do vencimento
@@ -180,7 +256,7 @@ function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
         <div className="row">
           <label>
             Repete
-            <select value={recurrence} onChange={(e) => setRecurrence(e.target.value as Recurrence)}>
+            <select value={recurrence} onChange={(e) => onScheduleChange(startMonth, e.target.value as Recurrence)}>
               {Object.entries(RECURRENCE_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -190,14 +266,61 @@ function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
           </label>
           <label>
             Começa em
-            <input type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value)} required />
+            <input type="month" value={startMonth} onChange={(e) => onScheduleChange(e.target.value, recurrence)} required />
           </label>
         </div>
 
         <div className="row">
           <label>
+            Número de parcelas (opcional)
+            <input inputMode="numeric" value={count} onChange={(e) => onCountChange(e.target.value)} placeholder="Sem fim" />
+          </label>
+          <label>
+            Termina em (opcional)
+            <input type="month" value={endValue} onChange={(e) => onEndChange(e.target.value)} />
+          </label>
+        </div>
+        {count === '' && !endDraft && <p className="muted small-note">Sem número de parcelas, a conta se repete sem parar. Para uma conta com fim, informe as parcelas ou o mês em que termina.</p>}
+        {count === '' && endDraft && <p className="error small-note">O mês em que a conta termina não pode ser antes do mês em que ela começa.</p>}
+        {countValid && endDraft && endDraft !== endValue && (
+          <p className="muted small-note">
+            A conta repete a cada {RECURRENCE_STEP[recurrence]} meses, então a última parcela cai em {formatCompetence(endValue)}.
+          </p>
+        )}
+
+        {!initial && countValid && maxPaid >= 1 && (
+          <>
+            <label>
+              Parcelas já pagas
+              <input
+                inputMode="numeric"
+                value={paidCount}
+                onChange={(e) => setPaidCount(String(Math.min(Number(e.target.value.replace(/\D/g, '').slice(0, 3) || '0'), maxPaid)))}
+                placeholder="0"
+              />
+            </label>
+            <p className="muted small-note">Se a conta já está em andamento, informe quantas parcelas você já pagou.</p>
+          </>
+        )}
+        {overdueOnCreate > 0 && (
+          <p className="muted small-note">
+            {overdueOnCreate === 1
+              ? '1 parcela já venceu e não foi paga: ela entra como atrasada.'
+              : `${overdueOnCreate} parcelas já venceram e não foram pagas: elas entram como atrasadas.`}
+          </p>
+        )}
+
+        <div className="row">
+          <label>
             Categoria
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+            <select
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value)
+                setCategoryTouched(true)
+                setCategorySuggested(false)
+              }}
+            >
               {categories.map((c) => (
                 <option key={c}>{c}</option>
               ))}
@@ -214,6 +337,7 @@ function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
             </select>
           </label>
         </div>
+        {categorySuggested && <p className="muted small-note">Categoria sugerida pelo nome. Se não for essa, é só trocar.</p>}
 
         <label>
           Fornecedor (opcional)
@@ -238,6 +362,8 @@ function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
         <button className="btn primary" type="submit" disabled={saving}>
           {saving ? 'Salvando…' : 'Salvar'}
         </button>
+
+        {initial && <CopyButton to={`/contas/nova?copiar=${initial.id}`} />}
 
         {initial && (
           <button type="button" className="btn" disabled={saving} onClick={() => void persist(!initial.active)}>
@@ -267,6 +393,13 @@ function Editor({ initial, bills }: { initial: Bill | null; bills: Bill[] }) {
         <section className="card stack danger-zone" aria-label="Excluir conta">
           <h2>Excluir conta</h2>
           <p className="muted">Apaga a conta e todos os lançamentos dela, inclusive os já pagos. Para só parar de gerar, arquive.</p>
+          {linkedPurchases.length > 0 && (
+            <p className="muted">
+              {linkedPurchases.length === 1 ? 'Uma compra a receber se refere' : `${linkedPurchases.length} compras a receber se referem`} a esta conta (
+              {linkedPurchases.map((r) => r.description).join(', ')}). {linkedPurchases.length === 1 ? 'Ela continua cadastrada' : 'Elas continuam cadastradas'},
+              mas {linkedPurchases.length === 1 ? 'perde' : 'perdem'} a ligação e o cálculo do gasto real.
+            </p>
+          )}
           <DeleteButton
             large
             label="Excluir conta"

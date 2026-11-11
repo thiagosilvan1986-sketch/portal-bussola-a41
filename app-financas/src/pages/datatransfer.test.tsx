@@ -155,7 +155,7 @@ describe('Planilhas (CSV)', () => {
     expect(uid).toBe('u1')
     expect(bills.map((b: Bill) => b.name)).toEqual(['Internet', 'Aluguel'])
     expect(await screen.findByText(/2 contas importadas\./)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Ver contas' }).getAttribute('href')).toBe('/contas')
+    expect(screen.getByRole('link', { name: 'Ver contas a pagar' }).getAttribute('href')).toBe('/contas')
     expect(card('Contas a pagar').queryByText('Internet;99,90;5')).toBeNull()
   })
 

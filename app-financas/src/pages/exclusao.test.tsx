@@ -30,6 +30,7 @@ const bill = (over: Partial<Bill> = {}): Bill => ({
 const hooks = vi.hoisted(() => ({
   useBills: vi.fn(),
   useEntries: vi.fn(),
+  usePeople: vi.fn(),
   useReceivables: vi.fn(),
   useRegistry: vi.fn(),
   useToday: vi.fn(),
@@ -59,6 +60,7 @@ beforeEach(() => {
   hooks.useBills.mockReturnValue({ data: [bill()], ready: true, error: null })
   hooks.useEntries.mockReturnValue({ data: [buildEntry(bill(), '2026-11')], ready: true, error: null })
   hooks.useReceivables.mockReturnValue({ data: [], ready: true, error: null })
+  hooks.usePeople.mockReturnValue({ data: [], ready: true, error: null })
   store.ensureEntries.mockResolvedValue(0)
   store.deleteBill.mockResolvedValue(undefined)
   store.skipEntry.mockResolvedValue(undefined)
@@ -115,6 +117,31 @@ describe('Excluir conta', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar exclusão' }))
     await waitFor(() => expect(store.deleteBill).toHaveBeenCalledWith('u1', 'b1'))
     await screen.findByText('lista de contas')
+  })
+
+  it('avisa quando há compras a receber ligadas à conta: elas ficam, só perdem a ligação', () => {
+    hooks.useReceivables.mockReturnValue({
+      data: [
+        {
+          id: 'r1',
+          personId: 'p1',
+          kind: 'cartao',
+          description: 'Tênis',
+          totalCents: 30000,
+          installmentCount: 3,
+          firstDueDate: '2026-11-10',
+          installments: [],
+          notes: '',
+          billId: 'b1',
+        },
+      ],
+      ready: true,
+      error: null,
+    })
+    renderEdit()
+    const zona = screen.getByRole('region', { name: 'Excluir conta' })
+    expect(zona.textContent).toContain('Uma compra a receber se refere a esta conta (Tênis)')
+    expect(zona.textContent).toContain('perde a ligação')
   })
 
   it('cancelar não apaga nada', () => {

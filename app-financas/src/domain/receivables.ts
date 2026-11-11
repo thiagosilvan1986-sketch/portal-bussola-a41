@@ -33,6 +33,18 @@ export const KIND_INFO: Record<ReceivableKind, { tab: string; title: string; hin
   },
 }
 
+const KIND_NOUN: Record<ReceivableKind, string> = { cartao: 'reembolso do cartão', servico: 'serviço prestado' }
+
+/**
+ * Título da tela de cadastro, que acompanha as opções escolhidas:
+ * "Novo reembolso do cartão", "Novo serviço prestado em 10x" (só com mais de 1 parcela), "Editar serviço prestado".
+ */
+export function receivableFormTitle(kind: ReceivableKind, opts: { editing: boolean; installments: number | null }): string {
+  if (opts.editing) return `Editar ${KIND_NOUN[kind]}`
+  const times = opts.installments !== null && opts.installments > 1 ? ` em ${opts.installments}x` : ''
+  return `Novo ${KIND_NOUN[kind]}${times}`
+}
+
 /** Endereço da lista de cada tipo (a de cartão é a padrão). */
 export function listPath(kind: ReceivableKind): string {
   return kind === 'servico' ? '/receber?aba=servicos' : '/receber'
@@ -81,6 +93,7 @@ export interface ReceivableEdit {
   installmentCount: number
   firstDueDate: IsoDate
   notes: string
+  billId?: string | null
 }
 
 /**

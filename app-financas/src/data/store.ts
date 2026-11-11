@@ -3,6 +3,7 @@ import {
   arrayUnion,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDocs,
   onSnapshot,
@@ -14,7 +15,7 @@ import {
   type Unsubscribe,
   type WriteBatch,
 } from 'firebase/firestore'
-import { billAppliesTo, buildEntry, missingEntries } from '../domain/bills'
+import { backfillEntries, billAppliesTo, buildEntry, missingEntries } from '../domain/bills'
 import { competenceOf } from '../domain/dates'
 import { addCharge, removeCharge, withPayment } from '../domain/receivables'
 import { normalizeRegistry, type Registry } from '../domain/registry'
@@ -53,6 +54,7 @@ const BILL_DEFAULTS: Data<Bill> = {
   notes: '',
   active: true,
   skippedMonths: [],
+  installmentCount: null,
 }
 
 const ENTRY_DEFAULTS: Data<Entry> = {
@@ -124,14 +126,28 @@ export async function ensureEntries(uid: string, bills: Bill[], competences: Com
   return missing.length
 }
 
-/** Cria ou atualiza uma conta e propaga a mudança aos lançamentos futuros ainda não pagos. */
+/**
+ * Cria ou atualiza uma conta e propaga a mudança aos lançamentos futuros ainda não pagos.
+ * Numa conta nova e parcelada que já está em andamento, `paidInstallments` parcelas entram como pagas e as que já
+ * venceram sem pagamento entram como atrasadas. Tudo é gravado junto com a conta, para o app não recriar o mês atual no meio.
+ */
 export async function saveBill(
   uid: string,
   input: Data<Bill> & { id?: string },
   today: IsoDate,
+  opts: { paidInstallments?: number } = {},
 ): Promise<string> {
   const ref = input.id ? doc(billsCol(uid), input.id) : doc(billsCol(uid))
   const bill: Bill = { ...input, id: ref.id }
+  if (!input.id && bill.installmentCount) {
+    const batch = writeBatch(database())
+    batch.set(ref, withoutId(bill))
+    for (const entry of backfillEntries(bill, opts.paidInstallments ?? 0, competenceOf(today))) {
+      batch.set(doc(entriesCol(uid), entry.id), withoutId(entry))
+    }
+    await batch.commit()
+    return ref.id
+  }
   await setDoc(ref, withoutId(bill), { merge: true })
 
   const from = competenceOf(today)
@@ -145,11 +161,14 @@ export async function saveBill(
     if (!billAppliesTo(bill, e.competence)) {
       batch.delete(d.ref)
     } else {
+      const fresh = buildEntry(bill, e.competence)
       batch.update(d.ref, {
         billName: bill.name,
         category: bill.category,
         expectedAmountCents: bill.expectedAmountCents,
-        dueDate: buildEntry(bill, e.competence).dueDate,
+        dueDate: fresh.dueDate,
+        installmentNumber: fresh.installmentNumber ?? deleteField(),
+        installmentTotal: fresh.installmentTotal ?? deleteField(),
       })
     }
   }
@@ -157,10 +176,17 @@ export async function saveBill(
   return ref.id
 }
 
-/** Exclui a conta e todos os lançamentos dela (inclusive os já pagos). Para só parar de gerar, a conta pode ser arquivada. */
+/**
+ * Exclui a conta e todos os lançamentos dela (inclusive os já pagos). Para só parar de gerar, a conta pode ser arquivada.
+ * As compras a receber que se referiam à conta continuam cadastradas, só perdem a ligação.
+ */
 export async function deleteBill(uid: string, billId: string): Promise<void> {
-  const snap = await getDocs(query(entriesCol(uid), where('billId', '==', billId)))
-  const operations = snap.docs.map((d) => (batch: WriteBatch) => batch.delete(d.ref))
+  const [entries, linked] = await Promise.all([
+    getDocs(query(entriesCol(uid), where('billId', '==', billId))),
+    getDocs(query(receivablesCol(uid), where('billId', '==', billId))),
+  ])
+  const operations = entries.docs.map((d) => (batch: WriteBatch) => batch.delete(d.ref))
+  for (const d of linked.docs) operations.push((batch) => batch.update(d.ref, { billId: null }))
   operations.push((batch) => batch.delete(doc(billsCol(uid), billId)))
   return commitInChunks(operations)
 }
@@ -282,7 +308,7 @@ export function setInstallmentPayment(
 
 /** Grava a compra editada (veja `editReceivable`, que mantém as baixas já feitas). */
 export function updateReceivable(uid: string, receivable: Receivable) {
-  return setDoc(doc(receivablesCol(uid), receivable.id), { ...withoutId(receivable) })
+  return setDoc(doc(receivablesCol(uid), receivable.id), { ...withoutId(receivable), billId: receivable.billId ?? null })
 }
 
 export function deleteReceivable(uid: string, receivableId: string) {
@@ -361,9 +387,29 @@ function commitInChunks(operations: ((batch: WriteBatch) => void)[]): Promise<vo
   return Promise.all(commits).then(() => undefined)
 }
 
-/** Cadastra as contas lidas da planilha. Quem chama já tirou as que existem (`parseBillsCsv`). */
-export function importBills(uid: string, bills: NewBill[]): Promise<void> {
-  return commitInChunks(bills.map((bill) => (batch) => batch.set(doc(billsCol(uid)), bill)))
+/**
+ * Cadastra as contas lidas da planilha. Quem chama já tirou as que existem (`parseBillsCsv`).
+ * Conta parcelada e em andamento grava junto os lançamentos pagos e atrasados; cada conta fica inteira no mesmo lote.
+ */
+export function importBills(uid: string, bills: NewBill[], today: IsoDate): Promise<void> {
+  const thisMonth = competenceOf(today)
+  const batches: WriteBatch[] = []
+  let batch = writeBatch(database())
+  let used = 0
+  for (const { paidInstallments, ...data } of bills) {
+    const ref = doc(billsCol(uid))
+    const entries = data.installmentCount ? backfillEntries({ ...data, id: ref.id }, paidInstallments ?? 0, thisMonth) : []
+    if (used > 0 && used + 1 + entries.length > BATCH_LIMIT) {
+      batches.push(batch)
+      batch = writeBatch(database())
+      used = 0
+    }
+    batch.set(ref, data)
+    for (const entry of entries) batch.set(doc(entriesCol(uid), entry.id), withoutId(entry))
+    used += 1 + entries.length
+  }
+  if (used > 0) batches.push(batch)
+  return Promise.all(batches.map((b) => b.commit())).then(() => undefined)
 }
 
 /** Cadastra as pessoas novas e as compras lidas da planilha. */

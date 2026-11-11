@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { billAppliesTo, buildEntry, missingEntries } from './bills'
+import { backfillEntries, billAppliesTo, buildEntry, endCompetence, installmentLabel, installmentNumberAt, installmentsUntil, missingEntries } from './bills'
 import { addMonths, daysInMonth, diffDays, dueDateFor, formatCompetence, formatDateBR, monthsBetween, todayInSaoPaulo } from './dates'
 import { displayStatus, isPending, remainingCents, sortEntries, summarize } from './entries'
 import { centsToInput, formatBRL, parseBRLToCents } from './money'
@@ -118,6 +118,64 @@ describe('contas recorrentes', () => {
 
     const partial = missingEntries(bills, new Set(['b1_2026-11']), ['2026-11'])
     expect(partial.map((e) => e.id)).toEqual(['b2_2026-11'])
+  })
+})
+
+describe('contas parceladas', () => {
+  const parcelada = (over: Partial<Bill> = {}) => bill({ installmentCount: 10, startMonth: '2026-09', ...over })
+
+  it('calcula o mês final, e o número de parcelas a partir do mês final', () => {
+    expect(endCompetence('2026-09', 'monthly', 10)).toBe('2027-06')
+    expect(endCompetence('2026-09', 'quarterly', 4)).toBe('2027-06')
+    expect(endCompetence('2026-09', 'monthly', 1)).toBe('2026-09')
+    expect(installmentsUntil('2026-09', '2027-06', 'monthly')).toBe(10)
+    expect(installmentsUntil('2026-09', '2027-06', 'quarterly')).toBe(4)
+    expect(installmentsUntil('2026-09', '2027-07', 'quarterly')).toBe(4)
+    expect(installmentsUntil('2026-09', '2026-09', 'monthly')).toBe(1)
+    expect(installmentsUntil('2026-09', '2026-08', 'monthly')).toBeNull()
+  })
+
+  it('numera as parcelas a partir do mês de início, respeitando a periodicidade', () => {
+    expect(installmentNumberAt({ startMonth: '2026-09', recurrence: 'monthly' }, '2026-11')).toBe(3)
+    expect(installmentNumberAt({ startMonth: '2026-09', recurrence: 'quarterly' }, '2026-12')).toBe(2)
+    expect(installmentNumberAt({ startMonth: '2026-09', recurrence: 'quarterly' }, '2026-11')).toBeNull()
+    expect(installmentNumberAt({ startMonth: '2026-09', recurrence: 'monthly' }, '2026-08')).toBeNull()
+  })
+
+  it('para de gerar depois da última parcela', () => {
+    expect(billAppliesTo(parcelada(), '2027-06')).toBe(true)
+    expect(billAppliesTo(parcelada(), '2027-07')).toBe(false)
+    expect(billAppliesTo(parcelada({ installmentCount: null }), '2030-01')).toBe(true)
+    expect(billAppliesTo(parcelada({ recurrence: 'quarterly', installmentCount: 2 }), '2026-12')).toBe(true)
+    expect(billAppliesTo(parcelada({ recurrence: 'quarterly', installmentCount: 2 }), '2027-03')).toBe(false)
+    expect(missingEntries([parcelada({ startMonth: '2026-01', installmentCount: 3 })], new Set(), ['2026-03', '2026-04'])).toHaveLength(1)
+  })
+
+  it('o lançamento sai com "Parcela N de M"; conta sem fim não tem rótulo', () => {
+    const e = buildEntry(parcelada(), '2026-11')
+    expect(e).toMatchObject({ installmentNumber: 3, installmentTotal: 10 })
+    expect(installmentLabel(e)).toBe('Parcela 3 de 10')
+    const open = buildEntry(bill(), '2026-11')
+    expect(open).not.toHaveProperty('installmentNumber')
+    expect(installmentLabel(open)).toBeNull()
+  })
+
+  it('conta que já está em andamento: pagas entram pagas, vencidas e não pagas entram atrasadas, o mês atual fica para o automático', () => {
+    // começou em setembro, estamos em novembro: parcelas 1 (set), 2 (out), 3 (nov)
+    const none = backfillEntries(parcelada(), 0, '2026-11')
+    expect(none.map((e) => [e.competence, e.paidAt])).toEqual([
+      ['2026-09', null],
+      ['2026-10', null],
+    ])
+    const one = backfillEntries(parcelada(), 1, '2026-11')
+    expect(one.map((e) => e.paidAt)).toEqual(['2026-09-15', null])
+    expect(one[0]).toMatchObject({ paidAmountCents: 20000, installmentNumber: 1, installmentTotal: 10 })
+    const three = backfillEntries(parcelada(), 3, '2026-11')
+    expect(three.map((e) => e.competence)).toEqual(['2026-09', '2026-10', '2026-11'])
+    expect(three.every((e) => e.paidAt !== null)).toBe(true)
+    // início no futuro ou no mês atual, sem parcelas pagas: nada a criar
+    expect(backfillEntries(parcelada({ startMonth: '2026-11' }), 0, '2026-11')).toEqual([])
+    expect(backfillEntries(parcelada({ startMonth: '2027-01' }), 0, '2026-11')).toEqual([])
   })
 })
 

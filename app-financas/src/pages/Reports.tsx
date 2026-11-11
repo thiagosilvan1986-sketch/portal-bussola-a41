@@ -11,6 +11,7 @@ import { useBills, useEntriesRange, usePeople, useReceivables, useToday } from '
 import { useMoney, usePrivacy } from '../data/privacy'
 import { withTransition } from '../data/transition'
 import { formatCompetence } from '../domain/dates'
+import { netOfReimbursements } from '../domain/linked'
 import {
   OTHER_CATEGORIES,
   PERIOD_KINDS,
@@ -67,6 +68,8 @@ export default function Reports() {
   const [category, setCategory] = useState<string | null>(null)
   const [mode, setMode] = useState<ChartMode>('barras')
   const [selected, setSelected] = useState<string | null>(null)
+  // Bruto: o que se paga nas contas. Real: o mesmo, menos o que as pessoas devolvem pelas contas ligadas a compras a receber.
+  const [basis, setBasis] = useState<'bruto' | 'real'>('bruto')
 
   const period = useMemo(() => shiftPeriod(periodOf(kind, today), offset), [kind, offset, today])
   const months = useMemo(() => periodMonths(period), [period])
@@ -84,39 +87,53 @@ export default function Reports() {
   const view = useMemo(() => {
     const now = entriesWithProjection(entries.data, bills.data, months, today)
     const prev = entriesWithProjection(before.data, bills.data, previous, today)
-    const slices = categorySlices(now.entries, months, 5)
-    const ranked = rankCategories(now.entries, months)
+    // Só dá para descontar quando se olha o que se paga; em "A receber" a pessoa quer ver o que ainda lhe devem.
+    const real = basis === 'real' && scope !== 'receber'
+    const netNow = real ? netOfReimbursements(now.entries, receivables.data) : null
+    const netPrev = real ? netOfReimbursements(prev.entries, receivables.data) : null
+    const nowEntries = netNow?.entries ?? now.entries
+    const prevEntries = netPrev?.entries ?? prev.entries
+    const receivablesNow = netNow?.receivables ?? receivables.data
+    const receivablesPrev = netPrev?.receivables ?? receivables.data
+    const slices = categorySlices(nowEntries, months, 5)
+    const ranked = rankCategories(nowEntries, months)
     const members =
       category === null ? null : category === OTHER_CATEGORIES ? (slices.find((s) => s.category === OTHER_CATEGORIES)?.members ?? []) : [category]
     const pick = (list: typeof now.entries) => (members ? list.filter((e) => members.includes(e.category)) : list)
     const wantPay = scope !== 'receber'
     const wantRecv = scope !== 'pagar'
-    const payNow = wantPay ? pick(now.entries) : []
-    const payBefore = wantPay ? pick(prev.entries) : []
-    const recv = wantRecv ? receivables.data : []
-    const recvAll = sumMonths(monthlyReport(months, [], receivables.data, today)).recvTotalCents
+    const payNow = wantPay ? pick(nowEntries) : []
+    const payBefore = wantPay ? pick(prevEntries) : []
+    const recv = wantRecv ? receivablesNow : []
+    const recvAll = sumMonths(monthlyReport(months, [], receivablesNow, today)).recvTotalCents
     const rows = monthlyReport(months, payNow, recv, today, wantPay ? now.projectedMonths : new Set())
-    const beforeRows = monthlyReport(previous, payBefore, recv, today)
+    const beforeRows = monthlyReport(previous, payBefore, wantRecv ? receivablesPrev : [], today)
     return {
       rows,
       totals: sumMonths(rows),
       before: sumMonths(beforeRows),
       slices,
       ranked,
-      allEntries: now.entries,
-      heat: dueDayMap(pick(now.entries), receivables.data, months, scope === 'receber' ? 'receber' : 'pagar'),
+      allEntries: nowEntries,
+      reimbursedCents: netNow?.reimbursedCents ?? 0,
+      notReceivedCents: netNow?.notReceivedCents ?? 0,
+      heat: dueDayMap(pick(nowEntries), receivablesNow, months, scope === 'receber' ? 'receber' : 'pagar'),
       hasAny: slices.length > 0 || recvAll > 0,
       flow: scope !== 'receber' ? flowModel(slices, recvAll) : null,
       debtors: topDebtors(receivables.data, people.data, months, today),
       hasProjection: wantPay && now.projectedMonths.size > 0,
     }
-  }, [entries.data, before.data, bills.data, receivables.data, people.data, months, previous, today, scope, category])
+  }, [entries.data, before.data, bills.data, receivables.data, people.data, months, previous, today, scope, category, basis])
 
   const ready = entries.ready && before.ready && bills.ready && receivables.ready && people.ready
   const failed = entries.error || before.error || bills.error || receivables.error
   const { totals, rows } = view
   const showPay = scope !== 'receber'
   const showRecv = scope !== 'pagar'
+  const hasLinked = receivables.data.some((r) => r.billId)
+  const showBasis = hasLinked && scope !== 'receber'
+  const realView = showBasis && basis === 'real'
+  const payName = realView ? 'Gasto real' : 'A pagar'
   const expected = balanceView(expectedBalance(totals))
   const realized = realizedBalance(totals)
   const overdue = totals.payOverdueCents + totals.recvOverdueCents
@@ -202,8 +219,8 @@ export default function Reports() {
           <h2 aria-live="polite">{periodTitle(period)}</h2>
           <span className="muted">{kind === 'ano' ? 'jan a dez' : periodSpan(period)}</span>
           {offset !== 0 && (
-            <button className="link-btn" onClick={() => move(-offset)}>
-              Voltar ao período atual
+            <button type="button" className="back-pill" onClick={() => move(-offset)}>
+              <span aria-hidden="true">↺</span> Voltar ao período atual
             </button>
           )}
         </div>
@@ -223,6 +240,23 @@ export default function Reports() {
             </button>
           ))}
         </div>
+        {showBasis && (
+          <div className="basis-row">
+            <div className="segmented segmented-small" role="group" aria-label="Tipo de valor das contas">
+              <button type="button" aria-pressed={basis === 'bruto'} onClick={() => withTransition(() => setBasis('bruto'))}>
+                Bruto
+              </button>
+              <button type="button" aria-pressed={basis === 'real'} onClick={() => withTransition(() => setBasis('real'))}>
+                Real
+              </button>
+            </div>
+            <p className="muted small-note">
+              {realView
+                ? `Gasto real: o que as pessoas devolvem pelas contas ligadas (${money(view.reimbursedCents)}) já está descontado. ${money(view.notReceivedCents)} ainda não recebidos.`
+                : 'Bruto: o que você paga nas contas. Real desconta o que as pessoas devolvem.'}
+            </p>
+          </div>
+        )}
         {scope !== 'receber' && chips.length > 0 && (
           <div className="chips chips-scroll" role="group" aria-label="Categoria">
             <button type="button" className="chip-btn" aria-pressed={category === null} onClick={() => chooseCategory(null)}>
@@ -250,7 +284,7 @@ export default function Reports() {
           <section className="kpis vt-kpis" aria-label="Resumo do período">
             {showPay && (
               <div className={`card kpi tone-pay${scope === 'pagar' ? ' kpi-wide' : ''}`}>
-                <span className="muted">A pagar</span>
+                <span className="muted">{payName}</span>
                 <strong>{money(totals.payTotalCents)}</strong>
                 <Sparkline values={rows.map((r) => r.payTotalCents)} color="var(--pay)" />
                 <div className="meter" aria-hidden="true">
@@ -324,7 +358,7 @@ export default function Reports() {
                 {scope === 'tudo' && mode === 'barras' && (
                   <ul className="legend" aria-label="Legenda">
                     <li>
-                      <span className="swatch swatch-pay" aria-hidden="true" /> A pagar
+                      <span className="swatch swatch-pay" aria-hidden="true" /> {payName}
                     </li>
                     <li>
                       <span className="swatch swatch-recv" aria-hidden="true" /> A receber
@@ -348,7 +382,7 @@ export default function Reports() {
                     {mode === 'acumulado' ? ', somando mês a mês.' : '.'}
                   </p>
                 )}
-                <MonthlyChart rows={rows} scope={scope} mode={mode} selected={selected} onSelect={setSelected} animKey={animKey} />
+                <MonthlyChart rows={rows} scope={scope} mode={mode} selected={selected} onSelect={setSelected} animKey={animKey} payLabel={payName} />
                 <p className="chart-readout" aria-live="polite">
                   {detail ? (
                     <>
@@ -356,7 +390,7 @@ export default function Reports() {
                       {detail.projected ? ' (previsto)' : ''}
                       {showPay && (
                         <>
-                          : a pagar {money(detail.payTotalCents)} (pago {money(detail.payPaidCents)})
+                          : {payName.toLowerCase()} {money(detail.payTotalCents)} (pago {money(detail.payPaidCents)})
                         </>
                       )}
                       {showPay && showRecv && ' ·'}
@@ -395,7 +429,7 @@ export default function Reports() {
                     <thead>
                       <tr>
                         <th scope="col">Mês</th>
-                        {showPay && <th scope="col">A pagar</th>}
+                        {showPay && <th scope="col">{payName}</th>}
                         {showRecv && <th scope="col">A receber</th>}
                         {scope === 'tudo' && <th scope="col">Saldo</th>}
                       </tr>
@@ -450,6 +484,7 @@ export default function Reports() {
                     onSelect={pickCategory}
                     onFilter={chooseCategory}
                     animKey={sectionKey}
+                    totalLabel={realView ? 'Gasto real' : 'Total a pagar'}
                   />
                 </div>
               )}

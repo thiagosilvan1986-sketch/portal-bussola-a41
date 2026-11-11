@@ -37,3 +37,24 @@ export function parseBRLToCents(input: string): number | null {
 export function centsToInput(cents: number): string {
   return (cents / 100).toFixed(2).replace('.', ',')
 }
+
+const MAX_MASK_DIGITS = 11 // até R$ 999.999.999,99
+
+/**
+ * Máscara de valor em reais: só os números contam e a vírgula entra sozinha, preenchendo da direita para a esquerda.
+ * "9606" -> "96,06"; "123456" -> "1.234,56". `previous` é o texto antes da edição: serve para saber se a pessoa
+ * está apagando (apagar até zerar deixa o campo vazio; digitar um zero mostra "0,00").
+ */
+export function maskMoney(raw: string, previous = ''): string {
+  const allDigits = raw.replace(/\D/g, '').slice(0, MAX_MASK_DIGITS)
+  const digits = allDigits.replace(/^0+/, '')
+  if (digits === '') return allDigits !== '' && raw.length >= previous.length ? '0,00' : ''
+  const padded = digits.padStart(3, '0')
+  const int = padded.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `${int},${padded.slice(-2)}`
+}
+
+/** Valor em centavos já com a máscara: 123456 -> "1.234,56". */
+export function centsToMasked(cents: number): string {
+  return maskMoney(String(Math.round(cents)).padStart(3, '0'), '')
+}

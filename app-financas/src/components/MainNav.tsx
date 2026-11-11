@@ -28,7 +28,7 @@ export function MainNav() {
       </NavLink>
       <NavLink to="/contas" className={link}>
         <Icon path={icons.bills} />
-        <span>Contas</span>
+        <span>A pagar</span>
       </NavLink>
       <NavLink to="/receber" className={link}>
         <Icon path={icons.receive} />

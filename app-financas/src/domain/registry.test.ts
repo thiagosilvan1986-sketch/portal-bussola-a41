@@ -5,6 +5,7 @@ import {
   addPayment,
   addSupplier,
   availableTemplates,
+  copyName,
   countBills,
   defaultRegistry,
   missingDefaultTemplates,
@@ -248,6 +249,16 @@ describe('atalhos de conta', () => {
     expect(reg.templates.filter((t) => t.name === 'Clube')).toHaveLength(1)
   })
 
+  it('atalho com número de parcelas: guarda, valida, e o cadastro lido de volta mantém', () => {
+    const reg = good(saveTemplate(defaultRegistry(), input({ name: 'Moto', installmentCount: 36 })))
+    expect(reg.templates[reg.templates.length - 1]).toMatchObject({ name: 'Moto', installmentCount: 36 })
+    expect(normalizeRegistry(JSON.parse(JSON.stringify(reg))).templates.find((t) => t.name === 'Moto')).toMatchObject({ installmentCount: 36 })
+    const sem = good(saveTemplate(defaultRegistry(), input({ name: 'Clube', installmentCount: null })))
+    expect(sem.templates[sem.templates.length - 1]).not.toHaveProperty('installmentCount')
+    expect(bad(saveTemplate(defaultRegistry(), input({ installmentCount: 0 })))).toBe('O número de parcelas deve ser de 1 a 360.')
+    expect(bad(saveTemplate(defaultRegistry(), input({ installmentCount: 361 })))).toBe('O número de parcelas deve ser de 1 a 360.')
+  })
+
   it('valida nome, repetição, categoria, forma, valor e dia', () => {
     const reg = defaultRegistry()
     expect(bad(saveTemplate(reg, input({ name: '' })))).toBe('Escreva um nome.')
@@ -298,5 +309,21 @@ describe('uso', () => {
     expect(countBills(bills, 'paymentMethod', 'pix')).toBe(1)
     expect(countBills(bills, 'supplier', 'petz')).toBe(2)
     expect(countBills(bills, 'supplier', '')).toBe(0)
+  })
+})
+
+describe('nome da cópia', () => {
+  it('acrescenta "(cópia)" e numera as próximas, sem empilhar', () => {
+    expect(copyName('Moradia', ['Moradia'])).toBe('Moradia (cópia)')
+    expect(copyName('Moradia', ['Moradia', 'Moradia (cópia)'])).toBe('Moradia (cópia 2)')
+    expect(copyName('Moradia (cópia)', ['Moradia', 'Moradia (cópia)'])).toBe('Moradia (cópia 2)')
+    expect(copyName('Moradia', ['moradia (COPIA)'])).toBe('Moradia (cópia 2)')
+  })
+
+  it('corta o nome original quando a cópia não cabe no limite', () => {
+    const longo = 'x'.repeat(40)
+    const copia = copyName(longo, [longo], 40)
+    expect(copia.length).toBeLessThanOrEqual(40)
+    expect(copia.endsWith(' (cópia)')).toBe(true)
   })
 })

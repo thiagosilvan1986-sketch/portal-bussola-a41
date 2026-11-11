@@ -1,5 +1,5 @@
-import { competenceOf, daysInMonth, formatDateBR } from './dates'
-import { RECURRENCE_LABEL } from './bills'
+import { addMonths, competenceOf, daysInMonth, formatDateBR } from './dates'
+import { MAX_BILL_INSTALLMENTS, RECURRENCE_LABEL, installmentsUntil } from './bills'
 import { parseCsv, toCsv, unprotectCell } from './csv'
 import { defaultRegistry, paymentLabel, type Registry } from './registry'
 import { simplify } from './text'
@@ -39,7 +39,8 @@ export const MAX_IMPORT_BYTES = 1_000_000
 const MAX_TEXT = 120
 const MAX_NOTES = 500
 
-export type NewBill = Omit<Bill, 'id'>
+/** Conta lida da planilha. `paidInstallments` (parcelas já pagas) não é gravado na conta: vira lançamentos pagos na importação. */
+export type NewBill = Omit<Bill, 'id'> & { paidInstallments?: number }
 export type NewPersonData = Omit<Person, 'id'>
 export type NewReceivable = Omit<Receivable, 'id' | 'personId'>
 
@@ -248,6 +249,8 @@ export const BILL_HEADERS = [
   'Forma de pagamento',
   'Observações',
   'Ativa',
+  'Parcelas',
+  'Parcelas pagas',
 ]
 
 type BillField =
@@ -262,6 +265,8 @@ type BillField =
   | 'payment'
   | 'notes'
   | 'active'
+  | 'installments'
+  | 'paidInstallments'
 
 const BILL_COLUMNS: Record<BillField, string[]> = {
   name: ['nome', 'conta', 'nomedaconta', 'descricao'],
@@ -275,6 +280,8 @@ const BILL_COLUMNS: Record<BillField, string[]> = {
   payment: ['formadepagamento', 'formapagamento', 'pagamento', 'forma'],
   notes: ['observacoes', 'observacao', 'obs', 'notas'],
   active: ['ativa', 'ativo'],
+  installments: ['parcelas', 'numerodeparcelas', 'qtdparcelas', 'quantidadedeparcelas', 'nparcelas'],
+  paidInstallments: ['parcelaspagas', 'parcelasjapagas', 'pagas', 'japagas'],
 }
 
 const monthText = (c: Competence) => `${c.slice(5)}/${c.slice(0, 4)}`
@@ -295,6 +302,8 @@ export function billsToCsv(bills: Bill[], registry: Registry = defaultRegistry()
       paymentLabel(registry, b.paymentMethod),
       b.notes,
       b.active ? 'Sim' : 'Não',
+      b.installmentCount ? String(b.installmentCount) : '',
+      '',
     ]),
   ])
 }
@@ -303,8 +312,9 @@ export function billsToCsv(bills: Bill[], registry: Registry = defaultRegistry()
 export function billsTemplateCsv(): string {
   return toCsv([
     BILL_HEADERS,
-    ['Energia elétrica', 'Contas de consumo', 'Companhia de energia', 'Variável', '180,00', '10', 'Mensal', '01/2026', 'Boleto', '', 'Sim'],
-    ['Plano de saúde', 'Saúde', 'Operadora', 'Fixo', '650,90', '5', 'Mensal', '01/2026', 'Débito automático', 'Titular e dependente', 'Sim'],
+    ['Energia elétrica', 'Contas de consumo', 'Companhia de energia', 'Variável', '180,00', '10', 'Mensal', '01/2026', 'Boleto', '', 'Sim', '', ''],
+    ['Plano de saúde', 'Saúde', 'Operadora', 'Fixo', '650,90', '5', 'Mensal', '01/2026', 'Débito automático', 'Titular e dependente', 'Sim', '', ''],
+    ['Parcela do carro', 'Transporte', 'Banco', 'Fixo', '980,00', '20', 'Mensal', '01/2026', 'Boleto', '48 parcelas, 10 já pagas', 'Sim', '48', '10'],
   ])
 }
 
@@ -424,6 +434,30 @@ export function parseBillsCsv(
     const longNotes = tooLong(notes, 'observações', MAX_NOTES)
     if (longNotes) errs.push(longNotes)
 
+    let installmentCount = 0
+    const installmentsRaw = get('installments')
+    if (installmentsRaw) {
+      const n = /^\d{1,3}$/.test(installmentsRaw) ? Number(installmentsRaw) : NaN
+      if (n >= 1 && n <= MAX_BILL_INSTALLMENTS) installmentCount = n
+      else errs.push(`parcelas “${installmentsRaw}” deve ser um número de 1 a ${MAX_BILL_INSTALLMENTS}`)
+    }
+
+    let paidInstallments = 0
+    const paidRaw = get('paidInstallments')
+    if (paidRaw) {
+      const n = /^\d{1,3}$/.test(paidRaw) ? Number(paidRaw) : NaN
+      const elapsed = installmentCount > 0 ? Math.min(installmentCount, installmentsUntil(startMonth, competenceOf(today), recurrence) ?? 0) : 0
+      if (Number.isNaN(n)) errs.push(`parcelas pagas “${paidRaw}” deve ser um número`)
+      else if (n > 0 && installmentCount === 0) errs.push('informe o número de parcelas para usar “Parcelas pagas”')
+      else if (n > Math.max(installmentCount - 1, 0) || n > elapsed) {
+        errs.push(`parcelas pagas (${n}) não pode passar de ${Math.max(Math.min(installmentCount - 1, elapsed), 0)}, que são as parcelas que já venceram`)
+      } else paidInstallments = n
+    }
+    if (installmentCount > 0 && errs.length === 0) {
+      const overdue = Math.min(installmentCount, installmentsUntil(startMonth, addMonths(competenceOf(today), -1), recurrence) ?? 0) - paidInstallments
+      if (overdue > 0) warns.push(`${overdue} ${overdue === 1 ? 'parcela já venceu sem pagamento e entra' : 'parcelas já venceram sem pagamento e entram'} como atrasada${overdue === 1 ? '' : 's'}`)
+    }
+
     if (errs.length > 0) {
       plan.errors.push({ line, message: errs.join('; ') })
       return
@@ -450,6 +484,8 @@ export function parseBillsCsv(
       notes,
       active,
       skippedMonths: [],
+      ...(installmentCount > 0 ? { installmentCount } : {}),
+      ...(paidInstallments > 0 ? { paidInstallments } : {}),
     })
   })
 

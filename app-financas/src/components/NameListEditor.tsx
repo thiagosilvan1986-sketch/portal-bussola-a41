@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { copyName } from '../domain/registry'
+import { CopyButton } from './CopyButton'
 
 export interface NameItem {
   key: string
@@ -71,6 +73,16 @@ export function NameListEditor(props: Props) {
     void run(
       () => onRename(key, editName),
       () => setEditing(null),
+    )
+  }
+
+  /** "Copiar e criar novo": cria na hora "Nome (cópia)" (a lista não tem outros campos para preencher antes). */
+  function copy(item: NameItem) {
+    setEditing(null)
+    setRemoving(null)
+    void run(
+      () => onAdd(copyName(item.label, items.map((i) => i.label))),
+      () => undefined,
     )
   }
 
@@ -204,6 +216,7 @@ export function NameListEditor(props: Props) {
                           >
                             Excluir
                           </button>
+                          <CopyButton small disabled={busy} onClick={() => copy(item)} />
                         </span>
                       )}
                     </>

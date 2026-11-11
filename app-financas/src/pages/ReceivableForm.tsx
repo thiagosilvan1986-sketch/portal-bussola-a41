@@ -1,9 +1,13 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { usePeople, useReceivables, useToday } from '../data/hooks'
+import { useBills, usePeople, useReceivables, useToday } from '../data/hooks'
 import { createReceivable, updateReceivable } from '../data/store'
 import { centsToInput, formatBRL, parseBRLToCents } from '../domain/money'
+import { ContactImport } from '../components/ContactImport'
+import { CopyButton } from '../components/CopyButton'
+import { MoneyInput } from '../components/MoneyInput'
+import { copyName } from '../domain/registry'
 import {
   KIND_INFO,
   MAX_INSTALLMENTS,
@@ -11,11 +15,14 @@ import {
   TONE_LABEL,
   buildInstallments,
   editReceivable,
+  formatPhone,
   isValidEmail,
   isValidPhone,
   lastPaidNumber,
   listPath,
+  personTone,
   phoneDigits,
+  receivableFormTitle,
   withFirstReceived,
 } from '../domain/receivables'
 import type { MessageTone, Person, Receivable, ReceivableKind } from '../domain/types'
@@ -28,7 +35,24 @@ export default function ReceivableForm() {
   const uid = useAuth().user!.uid
   const people = usePeople(uid)
   const receivables = useReceivables(uid)
+  const [params] = useSearchParams()
+  const copyPurchase = id ? null : params.get('copiarCompra')
+  const copyPerson = id ? null : params.get('copiarPessoa')
 
+  if (!id && (copyPurchase || copyPerson)) {
+    // "Copiar e criar novo": o cadastro novo já vem preenchido. Nada é salvo até tocar em Salvar.
+    if (!people.ready || !receivables.ready) return <main className="page"><p className="muted center-text">Carregando…</p></main>
+    return (
+      <Form
+        key={`copia-${copyPurchase ?? copyPerson}`}
+        uid={uid}
+        people={people.data}
+        peopleReady
+        copyOf={copyPurchase ? receivables.data.find((r) => r.id === copyPurchase) : undefined}
+        copyPerson={copyPerson ? people.data.find((p) => p.id === copyPerson) : undefined}
+      />
+    )
+  }
   if (!id) return <Form key="nova" uid={uid} people={people.data} peopleReady={people.ready} />
 
   if (!people.ready || !receivables.ready) {
@@ -68,25 +92,36 @@ interface FormProps {
   /** Presente quando está editando uma compra já cadastrada. */
   edit?: Receivable
   editPerson?: Person
+  /** "Copiar e criar novo" de uma compra: dados e pessoa dela, sem as baixas. */
+  copyOf?: Receivable
+  /** "Copiar e criar novo" de uma pessoa: contato dela como pessoa nova. */
+  copyPerson?: Person
 }
 
-function Form({ uid, people, peopleReady, edit, editPerson }: FormProps) {
+function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }: FormProps) {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const today = useToday()
 
-  const [kind, setKind] = useState<ReceivableKind>(edit?.kind ?? (params.get('tipo') === 'servico' ? 'servico' : 'cartao'))
-  const [personChoice, setPersonChoice] = useState(params.get('pessoa') ?? '')
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [tone, setTone] = useState<MessageTone>('amigavel')
-  const [description, setDescription] = useState(edit?.description ?? '')
-  const [total, setTotal] = useState(edit ? centsToInput(edit.totalCents) : '')
-  const [count, setCount] = useState(edit ? String(edit.installmentCount) : '10')
-  const [firstDue, setFirstDue] = useState(edit?.firstDueDate ?? today)
+  const source = edit ?? copyOf
+  const [kind, setKind] = useState<ReceivableKind>(source?.kind ?? (params.get('tipo') === 'servico' ? 'servico' : 'cartao'))
+  const [personChoice, setPersonChoice] = useState(copyPerson ? NEW_PERSON : copyOf ? copyOf.personId : (params.get('pessoa') ?? ''))
+  const [name, setName] = useState(copyPerson ? copyName(copyPerson.name, people.map((p) => p.name), 60) : '')
+  const [phone, setPhone] = useState(copyPerson?.phone ? formatPhone(copyPerson.phone) : '')
+  const [email, setEmail] = useState(copyPerson?.email ?? '')
+  const [tone, setTone] = useState<MessageTone>(copyPerson ? personTone(copyPerson) : 'amigavel')
+  const [description, setDescription] = useState(edit ? edit.description : copyOf ? copyName(copyOf.description, [copyOf.description], 80) : '')
+  const [total, setTotal] = useState(source ? centsToInput(source.totalCents) : '')
+  const [count, setCount] = useState(source ? String(source.installmentCount) : '10')
+  // A cópia começa hoje: o vencimento antigo geraria parcelas atrasadas que a pessoa não pediu.
+  const [firstDue, setFirstDue] = useState(edit ? edit.firstDueDate : today)
   const [received, setReceived] = useState('0')
-  const [notes, setNotes] = useState(edit?.notes ?? '')
+  const [notes, setNotes] = useState(source?.notes ?? '')
+  // Reembolso do cartão pode se referir a uma conta a pagar: o app mostra o gasto real (o que foi pago menos o que a pessoa devolve).
+  const bills = useBills(uid).data
+  const [billId, setBillId] = useState(source?.billId ?? '')
+  const billOptions = useMemo(() => [...bills].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'pt-BR')), [bills])
+  const linkedBillId = kind === 'cartao' && billOptions.some((b) => b.id === billId) ? billId : ''
   const [error, setError] = useState<string | null>(null)
 
   const sortedPeople = useMemo(() => [...people].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [people])
@@ -135,6 +170,7 @@ function Form({ uid, people, peopleReady, edit, editPerson }: FormProps) {
           installmentCount: n,
           firstDueDate: firstDue,
           notes: notes.trim(),
+          billId: linkedBillId || null,
         }),
       ).catch(log)
       navigate(`/receber/pessoa/${edit.personId}`)
@@ -160,21 +196,29 @@ function Form({ uid, people, peopleReady, edit, editPerson }: FormProps) {
         firstDueDate: firstDue,
         installments,
         notes: notes.trim(),
+        ...(linkedBillId ? { billId: linkedBillId } : {}),
       },
     })
     navigate(`/receber/pessoa/${personId}`)
   }
 
   const cancelTo = edit ? `/receber/pessoa/${edit.personId}` : listPath(kind)
+  const title = receivableFormTitle(kind, { editing: Boolean(edit), installments: validCount ? n : null })
+  const forPerson = edit ? editPerson?.name : isNew ? name.trim() : sortedPeople.find((p) => p.id === personChoice)?.name
 
   return (
     <main className="page">
       <header className="page-head">
-        <h1>{edit ? 'Editar compra' : 'Nova compra parcelada'}</h1>
-        <Link className="link-btn" to={cancelTo}>
-          Cancelar
+        <h1>{title}</h1>
+        <Link className="btn primary cancel-btn" to={cancelTo}>
+          <span aria-hidden="true">✕</span> Cancelar
         </Link>
       </header>
+      {forPerson && <p className="muted for-person">para {forPerson}</p>}
+      {copyOf && (
+        <p className="muted copy-note">Cópia de “{copyOf.description}”. As baixas não são copiadas, e nada é salvo até você tocar em Salvar.</p>
+      )}
+      {copyPerson && <p className="muted copy-note">Cópia do contato de “{copyPerson.name}”. Nada é salvo até você tocar em Salvar.</p>}
 
       <form className="stack card" onSubmit={onSubmit} noValidate>
         <fieldset className="kind-picker">
@@ -213,6 +257,13 @@ function Form({ uid, people, peopleReady, edit, editPerson }: FormProps) {
 
         {isNew && (
           <>
+            <ContactImport
+              onPick={(c) => {
+                if (c.name) setName(c.name)
+                if (c.phone) setPhone(c.phone)
+                if (c.email) setEmail(c.email)
+              }}
+            />
             <label>
               Nome da pessoa
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Ana Souza" autoComplete="off" />
@@ -255,10 +306,31 @@ function Form({ uid, people, peopleReady, edit, editPerson }: FormProps) {
           <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={KIND_INFO[kind].placeholder} />
         </label>
 
+        {kind === 'cartao' && billOptions.length > 0 && (
+          <>
+            <label>
+              Refere-se à conta a pagar (opcional)
+              <select value={linkedBillId} onChange={(e) => setBillId(e.target.value)}>
+                <option value="">Nenhuma</option>
+                {billOptions.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                    {b.active ? '' : ' (arquivada)'}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="muted small-note">
+              Se este valor volta de uma conta que você paga (como a fatura do cartão), ligue as duas. O app mostra o seu gasto real: o
+              que você pagou menos o que a pessoa devolve.
+            </p>
+          </>
+        )}
+
         <div className="row">
           <label>
             Valor total (R$)
-            <input inputMode="decimal" value={total} onChange={(e) => setTotal(e.target.value)} placeholder="420,00" />
+            <MoneyInput value={total} onChange={setTotal} placeholder="420,00" />
           </label>
           <label>
             Nº de parcelas
@@ -311,6 +383,7 @@ function Form({ uid, people, peopleReady, edit, editPerson }: FormProps) {
         <button className="btn primary" type="submit">
           {edit ? 'Salvar alterações' : 'Salvar'}
         </button>
+        {edit && <CopyButton to={`/receber/nova?copiarCompra=${edit.id}`} />}
       </form>
     </main>
   )

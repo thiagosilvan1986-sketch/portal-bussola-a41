@@ -34,13 +34,15 @@ interface Props {
   /** Limpar a escolha não leva a lugar nenhum: usa o filtro direto. */
   onFilter: (category: string | null) => void
   animKey: string
+  /** Texto do centro da rosquinha: "Total a pagar" (padrão) ou "Gasto real" na visão que desconta os reembolsos. */
+  totalLabel?: string
 }
 
 /**
  * Para onde vai o dinheiro: rosquinha + lista em ordem de tamanho. Tocar numa categoria a escolhe nos filtros
  * e abre as contas dela, com a evolução mês a mês.
  */
-export function CategorySection({ slices, entries, months, today, category, onSelect, onFilter, animKey }: Props) {
+export function CategorySection({ slices, entries, months, today, category, onSelect, onFilter, animKey, totalLabel = 'Total a pagar' }: Props) {
   const money = useMoney()
   const total = slices.reduce((acc, s) => acc + s.totalCents, 0)
   const active = sliceOf(slices, category)
@@ -100,7 +102,7 @@ export function CategorySection({ slices, entries, months, today, category, onSe
           })}
         </svg>
         <div className="donut-center" aria-hidden="true">
-          <span className="muted">{active ? active.category : 'Total a pagar'}</span>
+          <span className="muted">{active ? active.category : totalLabel}</span>
           <strong>{money(active ? active.totalCents : total)}</strong>
           {active && <span className="muted">{active.share}% do total</span>}
         </div>

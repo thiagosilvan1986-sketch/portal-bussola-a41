@@ -352,3 +352,44 @@ describe('Relatórios', () => {
     expect(screen.getByText('Carregando…')).toBeTruthy()
   })
 })
+
+describe('Relatórios: gasto real (compra a receber ligada a uma conta)', () => {
+  const ligado: Receivable = { ...tenis, billId: 'b2' } // o Tênis volta pelo Aluguel (só para o teste)
+
+  it('sem nenhuma ligação, não mostra a escolha entre bruto e real', () => {
+    renderReports()
+    expect(screen.queryByRole('button', { name: 'Real' })).toBeNull()
+  })
+
+  it('o Real desconta das contas o que as pessoas devolvem e não conta duas vezes no a receber', () => {
+    hooks.useReceivables.mockReturnValue(live([ligado]))
+    renderReports()
+    expect(screen.getByRole('button', { name: 'Bruto' }).getAttribute('aria-pressed')).toBe('true')
+    expect(flat(kpi('A pagar').textContent)).toContain('R$ 3.600,00')
+    expect(flat(kpi('A receber').textContent)).toContain('R$ 300,00')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Real' }))
+    // 3.600 - 300 (uma parcela por mês, nos 3 meses) = 3.300; as parcelas foram descontadas, então o a receber zera
+    const gasto = kpi('Gasto real')
+    expect(flat(gasto.textContent)).toContain('R$ 3.300,00')
+    expect(screen.getByRole('columnheader', { name: 'Gasto real' })).toBeTruthy()
+    expect(screen.queryByRole('columnheader', { name: 'A pagar' })).toBeNull()
+    expect(flat(kpi('A receber').textContent)).toContain('R$ 0,00')
+    // 100 já recebidos em outubro; 200 ainda não
+    const note = flat(document.querySelector('.basis-row .small-note')!.textContent)
+    expect(note).toContain('R$ 300,00')
+    expect(note).toContain('R$ 200,00 ainda não recebidos')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bruto' }))
+    expect(flat(kpi('A pagar').textContent)).toContain('R$ 3.600,00')
+  })
+
+  it('em "A receber" a escolha some e as parcelas aparecem inteiras', () => {
+    hooks.useReceivables.mockReturnValue(live([ligado]))
+    renderReports()
+    fireEvent.click(screen.getByRole('button', { name: 'Real' }))
+    fireEvent.click(screen.getByRole('button', { name: 'A receber' }))
+    expect(screen.queryByRole('button', { name: 'Real' })).toBeNull()
+    expect(flat(kpi('A receber').textContent)).toContain('R$ 300,00')
+  })
+})

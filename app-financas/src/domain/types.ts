@@ -24,6 +24,8 @@ export interface Bill {
   active: boolean
   /** Meses cujo lançamento foi excluído: o app não os recria. Ausente em contas antigas. */
   skippedMonths?: Competence[]
+  /** Quantas parcelas a conta tem; depois da última ela para de gerar lançamentos. Vazio (ou ausente, em contas antigas) = sem fim. */
+  installmentCount?: number | null
 }
 
 /** Lançamento do mês (a ocorrência). O id é `${billId}_${competence}`. */
@@ -40,6 +42,9 @@ export interface Entry {
   paidAt: IsoDate | null
   barcode: string
   note: string
+  /** Presentes só em lançamentos de conta parcelada: "Parcela 3 de 10". */
+  installmentNumber?: number
+  installmentTotal?: number
 }
 
 export type DisplayStatus =
@@ -104,4 +109,6 @@ export interface Receivable {
   firstDueDate: IsoDate
   installments: Installment[]
   notes: string
+  /** Conta a pagar a que este reembolso se refere (opcional). Vazio ou ausente = sem ligação. */
+  billId?: string | null
 }

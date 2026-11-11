@@ -35,7 +35,7 @@ describe('Cabeçalho do app', () => {
     const links = within(nav).getAllByRole('link')
     expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
       ['Início', '/'],
-      ['Contas', '/contas'],
+      ['A pagar', '/contas'],
       ['A receber', '/receber'],
       ['Relatórios', '/relatorios'],
       ['Cadastros', '/cadastros'],
@@ -153,6 +153,21 @@ describe('Cabeçalho do app', () => {
     expect(labels).toEqual(['Ocultar', 'Incluir', 'Sair'])
     fireEvent.click(screen.getByRole('button', { name: 'Sair do app' }))
     expect(auth.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('só o Sair é vermelho no cabeçalho (classe header-exit), com ícone e texto', () => {
+    render(
+      <MemoryRouter>
+        <AppHeader />
+      </MemoryRouter>,
+    )
+    const exit = screen.getByRole('button', { name: 'Sair do app' })
+    expect(exit.classList.contains('header-exit')).toBe(true)
+    expect(exit.textContent).toBe('Sair')
+    expect(exit.querySelector('svg')).toBeTruthy()
+    const others = document.querySelectorAll('.header-actions button:not(.header-exit)')
+    expect(others.length).toBeGreaterThan(0)
+    others.forEach((b) => expect(b.classList.contains('header-exit')).toBe(false))
   })
 
   it('a logo leva sempre ao Início, de qualquer tela', () => {

@@ -139,6 +139,10 @@ h3 {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+/* Rótulo de duas linhas ao lado de um de uma linha: os campos ficam alinhados embaixo. */
+.row > label {
+  justify-content: flex-end;
+}
 
 label {
   display: flex;
@@ -205,6 +209,59 @@ a:focus-visible {
 .btn:disabled {
   opacity: 0.6;
   cursor: default;
+}
+/* Cancelar: mesmo estilo do Salvar e do Incluir (azul cheio), com o ✕ para não ser confundido com Salvar. */
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.contact-import {
+  gap: 6px;
+}
+.contact-import .small-note {
+  margin: 0;
+}
+.basis-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.basis-row .small-note {
+  margin: 0;
+}
+.copy-note {
+  margin: 0;
+}
+.cancel-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  gap: 6px;
+  white-space: nowrap;
+}
+.page-head > .cancel-btn {
+  flex-shrink: 0;
+}
+/* Voltar ao mês (ou período) atual: botão de verdade, em pílula, com contorno azul. */
+.back-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.back-pill:hover,
+.back-pill:active {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
 .link-btn {
@@ -1172,6 +1229,17 @@ details.charge-history > summary .muted {
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
 }
+/* Sair (desligar): o único botão vermelho do cabeçalho. O cabeçalho é sempre escuro, então as cores são fixas
+   (branco sobre #dc2626 = 4,8:1; o vermelho contra o fundo escuro = 4,2:1). O texto "Sair" continua visível. */
+.header-exit {
+  background: #dc2626;
+  border-color: #f87171;
+  color: #ffffff;
+}
+.header-exit:hover,
+.header-exit:active {
+  background: #b91c1c;
+}
 .include-btn {
   min-height: 40px;
   padding: 0 14px;
@@ -1307,6 +1375,11 @@ details.charge-history > summary .muted {
 .chip-prevista {
   background: var(--neutral-bg);
   color: var(--muted);
+}
+/* "Prevista" em amarelo, só no selo de situação das contas e parcelas (o ícone ○ e o texto continuam). */
+.status-chip.chip-prevista {
+  background: var(--warn-bg);
+  color: var(--warn-text);
 }
 
 /* ---- Relatórios ---- */
@@ -2109,4 +2182,31 @@ button.cat-row.active {
   ::view-transition-new(*) {
     animation: none !important;
   }
+}
+
+/* ---- Sobre: propósito do app ---- */
+.purpose {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+.purpose-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+.purpose h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+.purpose p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.for-person {
+  margin: -4px 0 0;
 }

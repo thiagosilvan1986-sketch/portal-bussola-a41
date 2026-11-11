@@ -63,7 +63,7 @@ export function AppHeader() {
           <button type="button" className="include-btn" aria-haspopup="dialog" onClick={() => setIncluding(true)}>
             <span aria-hidden="true">＋</span> Incluir
           </button>
-          <button type="button" className="header-icon" aria-label="Sair do app" onClick={() => void signOut()}>
+          <button type="button" className="header-icon header-exit" aria-label="Sair do app" onClick={() => void signOut()}>
             <PowerIcon />
             <span>Sair</span>
           </button>

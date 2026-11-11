@@ -143,6 +143,13 @@ describe('previsão dos meses sem lançamento', () => {
     expect(entries.map((e) => `${e.billId}_${e.competence}`)).toEqual(['b2_2026-11'])
   })
 
+  it('conta parcelada para de ser prevista depois da última parcela', () => {
+    const financiamento = bill({ id: 'b3', startMonth: '2026-10', installmentCount: 2 }) // out e nov
+    const { entries } = entriesWithProjection([], [financiamento], months, TODAY)
+    expect(entries.map((e) => e.competence)).toEqual(['2026-11'])
+    expect(entries[0]).toMatchObject({ installmentNumber: 2, installmentTotal: 2 })
+  })
+
   it('marca o mês como previsto no relatório', () => {
     const { entries, projectedMonths } = entriesWithProjection([], [bill()], months, TODAY)
     const rows = monthlyReport(months, entries, [], TODAY, projectedMonths)

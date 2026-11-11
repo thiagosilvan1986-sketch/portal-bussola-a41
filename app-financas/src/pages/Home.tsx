@@ -4,10 +4,12 @@ import { useAuth } from '../auth'
 import { EntrySheet } from '../components/EntrySheet'
 import { Welcome } from '../components/Welcome'
 import { StatusChip } from '../components/StatusChip'
-import { useBills, useEntries, useReceivables, useToday } from '../data/hooks'
+import { useBills, useEntries, usePeople, useReceivables, useToday } from '../data/hooks'
 import { ensureEntries, payEntry } from '../data/store'
 import { useMoney } from '../data/privacy'
 import { dismissWelcome, isWelcomeDismissed } from '../data/welcome'
+import { installmentLabel } from '../domain/bills'
+import { linkOfEntry } from '../domain/linked'
 import { addMonths, competenceOf, formatCompetence, formatDateBR } from '../domain/dates'
 import { amountDue, displayStatus, isPending, remainingCents, sortEntries, summarize } from '../domain/entries'
 import { KIND_INFO, RECEIVABLE_KINDS, listPath, ofKind, summarizePerson } from '../domain/receivables'
@@ -29,6 +31,7 @@ export default function Home() {
   const bills = useBills(uid)
   const entries = useEntries(uid, competence)
   const receivables = useReceivables(uid)
+  const people = usePeople(uid)
 
   // Parcelas vencidas que outras pessoas ainda não pagaram, separadas por tipo.
   const lateToReceive = useMemo(
@@ -76,8 +79,8 @@ export default function Home() {
         <div className="month-title">
           <h1>{formatCompetence(competence)}</h1>
           {competence !== thisMonth && (
-            <button className="link-btn" onClick={() => setCompetence(thisMonth)}>
-              Voltar para o mês atual
+            <button type="button" className="back-pill" onClick={() => setCompetence(thisMonth)}>
+              <span aria-hidden="true">↺</span> Voltar para o mês atual
             </button>
           )}
         </div>
@@ -173,7 +176,10 @@ export default function Home() {
               <li key={e.id} className={`row-card status-${status}`}>
                 <button className="row-main" onClick={() => setSelectedId(e.id)}>
                   <span className="row-title">{e.billName}</span>
-                  <span className="muted">Vence {formatDateBR(e.dueDate)}</span>
+                  <span className="muted">
+                    Vence {formatDateBR(e.dueDate)}
+                    {installmentLabel(e) && ` · ${installmentLabel(e)}`}
+                  </span>
                   <StatusChip status={status} />
                 </button>
                 <div className="row-side">
@@ -204,6 +210,7 @@ export default function Home() {
           entry={selected}
           today={today}
           billExists={bills.data.some((b) => b.id === selected.billId)}
+          link={linkOfEntry(selected, receivables.data, people.data)}
           onClose={() => setSelectedId(null)}
         />}
     </main>

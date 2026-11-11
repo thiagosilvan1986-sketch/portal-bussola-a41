@@ -9,6 +9,7 @@ import { buildInstallments } from '../domain/receivables'
 import type { Bill, Entry, Receivable } from '../domain/types'
 
 const TODAY = '2026-11-09'
+const flat = (s: string | null) => (s ?? '').replace(/\u00a0/g, ' ')
 
 const bill = (over: Partial<Bill> = {}): Bill => ({
   id: 'b1',
@@ -39,6 +40,7 @@ const entries: Entry[] = [
 const hooks = vi.hoisted(() => ({
   useBills: vi.fn(),
   useEntries: vi.fn(),
+  usePeople: vi.fn(),
   useReceivables: vi.fn(),
   useRegistry: vi.fn(),
   useToday: vi.fn(),
@@ -65,6 +67,7 @@ beforeEach(() => {
   hooks.useBills.mockReturnValue({ data: [bill()], ready: true, error: null })
   hooks.useEntries.mockReturnValue({ data: entries, ready: true, error: null })
   hooks.useReceivables.mockReturnValue({ data: [], ready: true, error: null })
+  hooks.usePeople.mockReturnValue({ data: [], ready: true, error: null })
   store.ensureEntries.mockResolvedValue(0)
   store.payEntry.mockResolvedValue(undefined)
   store.saveBill.mockResolvedValue('new-id')
@@ -189,6 +192,43 @@ describe('Início', () => {
     expect(within(rows[2]).getByText('Prevista')).toBeTruthy()
   })
 
+  it('conta parcelada mostra "Parcela N de M" junto do vencimento', () => {
+    const financiamento = bill({ id: 'b9', name: 'Financiamento', dueDay: 20, startMonth: '2026-09', installmentCount: 10 })
+    hooks.useEntries.mockReturnValue({ data: [buildEntry(financiamento, '2026-11'), ...entries], ready: true, error: null })
+    renderHome()
+    const row = screen.getAllByRole('listitem').find((r) => r.querySelector('.row-title')?.textContent === 'Financiamento')!
+    expect(within(row).getByText(/Vence 20\/11\/2026 · Parcela 3 de 10/)).toBeTruthy()
+    // conta sem fim não tem rótulo
+    const energia = screen.getAllByRole('listitem').find((r) => r.querySelector('.row-title')?.textContent === 'Energia')!
+    expect(within(energia).queryByText(/Parcela/)).toBeNull()
+  })
+
+  it('a folha da conta mostra o que as pessoas devolvem por ela e o gasto real', () => {
+    const fatura = bill({ id: 'b8', name: 'Cartão Nubank', dueDay: 10, expectedAmountCents: 100000 })
+    const ana = { id: 'p1', name: 'Ana', phone: '', email: '', charges: [] }
+    const reembolso = {
+      id: 'r1',
+      personId: 'p1',
+      kind: 'cartao' as const,
+      description: 'Tênis',
+      totalCents: 50000,
+      installmentCount: 1,
+      firstDueDate: '2026-11-10',
+      installments: buildInstallments(50000, 1, '2026-11-10'),
+      notes: '',
+      billId: 'b8',
+    }
+    hooks.useEntries.mockReturnValue({ data: [buildEntry(fatura, '2026-11')], ready: true, error: null })
+    hooks.useReceivables.mockReturnValue({ data: [reembolso], ready: true, error: null })
+    hooks.usePeople.mockReturnValue({ data: [ana], ready: true, error: null })
+    renderHome()
+    fireEvent.click(screen.getByText('Cartão Nubank'))
+    const sheet = within(screen.getByRole('dialog'))
+    expect(flat(sheet.getByText(/A receber \(Ana\)/).parentElement!.textContent)).toContain('R$ 500,00')
+    expect(flat(sheet.getByText('Seu gasto real').parentElement!.textContent)).toContain('R$ 500,00')
+    expect(sheet.getByText(/R\$.500,00 ainda não recebidos/)).toBeTruthy()
+  })
+
   it('o botão de check paga o valor a pagar com a data de hoje', () => {
     renderHome()
     fireEvent.click(screen.getByLabelText('Paguei Energia'))
@@ -216,8 +256,11 @@ describe('Início', () => {
     renderHome()
     fireEvent.click(screen.getByLabelText('Próximo mês'))
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('dezembro de 2026')
-    fireEvent.click(screen.getByText('Voltar para o mês atual'))
+    const voltar = screen.getByRole('button', { name: /Voltar para o mês atual/ })
+    expect(voltar.className).toContain('back-pill') // botão de verdade, não só texto
+    fireEvent.click(voltar)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('novembro de 2026')
+    expect(screen.queryByRole('button', { name: /Voltar para o mês atual/ })).toBeNull()
   })
 })
 
@@ -270,6 +313,144 @@ describe('Cadastro de conta', () => {
     submit()
     expect(screen.getByRole('alert').textContent).toContain(mensagem)
     expect(store.saveBill).not.toHaveBeenCalled()
+  })
+
+  it('o nome de uma conta que já existe escolhe a categoria sozinho, até a pessoa mexer nela', () => {
+    hooks.useBills.mockReturnValue({ data: [bill({ id: 'b9', name: 'Internet', category: 'Moradia' })], ready: true, error: null })
+    renderForm()
+    const categoria = () => (screen.getByLabelText('Categoria') as HTMLSelectElement).value
+    expect(categoria()).toBe('Outros')
+    fill('Nome', 'internet') // sem ligar para caixa
+    expect(categoria()).toBe('Moradia')
+    expect(screen.getByText(/Categoria sugerida pelo nome/)).toBeTruthy()
+    fill('Categoria', 'Lazer') // mexeu na mão: o app para de sugerir
+    expect(screen.queryByText(/Categoria sugerida pelo nome/)).toBeNull()
+    fill('Nome', 'Internet')
+    expect(categoria()).toBe('Lazer')
+  })
+
+  it('o nome de um atalho também sugere a categoria, e um nome desconhecido não mexe nela', () => {
+    hooks.useBills.mockReturnValue({ data: [], ready: true, error: null })
+    renderForm()
+    fill('Nome', 'Energia elétrica')
+    expect((screen.getByLabelText('Categoria') as HTMLSelectElement).value).toBe('Contas de consumo')
+    fill('Nome', 'Coisa que não existe')
+    expect((screen.getByLabelText('Categoria') as HTMLSelectElement).value).toBe('Contas de consumo')
+    expect(screen.queryByText(/Categoria sugerida pelo nome/)).toBeNull()
+  })
+
+  it('o valor leva a vírgula na máscara: só números, e 9606 vira 96,06', async () => {
+    renderForm()
+    const valor = screen.getByLabelText(/Valor/) as HTMLInputElement
+    fill(/Valor/, '9606')
+    expect(valor.value).toBe('96,06')
+    fill(/Valor/, '123456')
+    expect(valor.value).toBe('1.234,56')
+    fill('Nome', 'Internet')
+    fill('Dia do vencimento', '10')
+    submit()
+    await waitFor(() => expect(store.saveBill).toHaveBeenCalled())
+    expect(store.saveBill.mock.calls[0][1]).toMatchObject({ expectedAmountCents: 123456 })
+  })
+
+  describe('parcelas', () => {
+    const fillBasics = () => {
+      fill('Nome', 'Financiamento')
+      fill(/Valor/, '98000')
+      fill('Dia do vencimento', '10')
+    }
+    const fim = () => (screen.getByLabelText(/Termina em/) as HTMLInputElement).value
+
+    it('o número de parcelas e o começo calculam o fim, e o fim calcula o número de parcelas', () => {
+      renderForm()
+      fill('Começa em', '2026-09')
+      fill(/Número de parcelas/, '10')
+      expect(fim()).toBe('2027-06')
+      fill(/Termina em/, '2027-12')
+      expect((screen.getByLabelText(/Número de parcelas/) as HTMLInputElement).value).toBe('16')
+      fill(/Número de parcelas/, '')
+      fill(/Termina em/, '')
+      expect(fim()).toBe('')
+    })
+
+    it('respeita a repetição: o fim que não cai numa parcela vale a última antes dele', () => {
+      renderForm()
+      fill('Começa em', '2026-09')
+      fill('Repete', 'quarterly')
+      fill(/Termina em/, '2027-07')
+      expect((screen.getByLabelText(/Número de parcelas/) as HTMLInputElement).value).toBe('4')
+      expect(fim()).toBe('2027-06')
+      expect(screen.getByText(/a última parcela cai em junho de 2027/)).toBeTruthy()
+    })
+
+    it('fim antes do começo não vale: avisa e não salva', () => {
+      renderForm()
+      fillBasics()
+      fill('Começa em', '2026-09')
+      fill(/Termina em/, '2026-03')
+      expect(screen.getByText(/não pode ser antes do mês em que ela começa/)).toBeTruthy()
+      submit()
+      expect(store.saveBill).not.toHaveBeenCalled()
+    })
+
+    it('conta que já está em andamento: pede as parcelas já pagas e avisa das atrasadas', async () => {
+      renderForm()
+      fillBasics()
+      fill('Começa em', '2026-07') // hoje é novembro: jul, ago, set, out, nov já venceram
+      expect(screen.queryByLabelText('Parcelas já pagas')).toBeNull()
+      fill(/Número de parcelas/, '10')
+      const pagas = screen.getByLabelText('Parcelas já pagas') as HTMLInputElement
+      expect(pagas.value).toBe('0')
+      expect(screen.getByText(/Se a conta já está em andamento, informe quantas parcelas você já pagou/)).toBeTruthy()
+      expect(screen.getByText(/4 parcelas já venceram e não foram pagas/)).toBeTruthy()
+      fill('Parcelas já pagas', '3')
+      expect(screen.getByText(/1 parcela já venceu e não foi paga/)).toBeTruthy()
+      fill('Parcelas já pagas', '99') // passa do que já venceu: fica no máximo
+      expect(pagas.value).toBe('5')
+      fill('Parcelas já pagas', '3')
+      submit()
+      await waitFor(() => expect(store.saveBill).toHaveBeenCalled())
+      const [, input, , opts] = store.saveBill.mock.calls[0]
+      expect(input).toMatchObject({ startMonth: '2026-07', installmentCount: 10 })
+      expect(opts).toEqual({ paidInstallments: 3 })
+    })
+
+    it('sem número de parcelas a conta não tem fim', async () => {
+      renderForm()
+      fillBasics()
+      submit()
+      await waitFor(() => expect(store.saveBill).toHaveBeenCalled())
+      expect(store.saveBill.mock.calls[0][1]).toMatchObject({ installmentCount: null })
+      expect(store.saveBill.mock.calls[0][3]).toEqual({ paidInstallments: 0 })
+    })
+
+    it('número de parcelas fora do limite é recusado', () => {
+      renderForm()
+      fillBasics()
+      fill(/Número de parcelas/, '0')
+      submit()
+      expect(screen.getByRole('alert').textContent).toContain('de 1 a 360')
+      expect(store.saveBill).not.toHaveBeenCalled()
+    })
+  })
+
+  it('o Cancelar é um botão do mesmo estilo do Salvar, com o ✕, e volta para a lista', () => {
+    renderForm()
+    const cancelar = screen.getByRole('link', { name: 'Cancelar' })
+    expect(cancelar.className).toContain('btn primary')
+    expect(cancelar.textContent).toContain('✕')
+    expect(cancelar.getAttribute('href')).toBe('/contas')
+  })
+
+  it('o atalho com número de parcelas já traz as parcelas e o fim', () => {
+    const reg = defaultRegistry()
+    reg.templates = [{ ...reg.templates[0], id: 'moto', name: 'Moto', installmentCount: 12 }]
+    hooks.useRegistry.mockReturnValue({ data: reg, ready: true, error: null })
+    hooks.useBills.mockReturnValue({ data: [], ready: true, error: null })
+    renderForm()
+    fireEvent.click(screen.getByRole('button', { name: 'Moto' }))
+    expect((screen.getByLabelText(/Número de parcelas/) as HTMLInputElement).value).toBe('12')
+    expect((screen.getByLabelText(/Termina em/) as HTMLInputElement).value).toBe('2027-10')
   })
 
   it('o atalho preenche nome e categoria', () => {

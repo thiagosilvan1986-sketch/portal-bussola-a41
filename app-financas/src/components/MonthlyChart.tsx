@@ -41,6 +41,8 @@ interface Props {
   onSelect: (competence: string | null) => void
   /** Muda quando o gráfico deve animar de novo (outro período, filtro ou tipo). */
   animKey: string
+  /** Nome do que sai: "A pagar" (padrão) ou "Gasto real" na visão que desconta os reembolsos. */
+  payLabel?: string
 }
 
 /**
@@ -48,7 +50,7 @@ interface Props {
  * Arrastar o dedo (ou passar o mouse) mostra os valores do mês sob o ponteiro; tocar fixa o mês.
  * Cada mês também é um botão pelo teclado.
  */
-export function MonthlyChart({ rows, scope, mode, selected, onSelect, animKey }: Props) {
+export function MonthlyChart({ rows, scope, mode, selected, onSelect, animKey, payLabel = 'A pagar' }: Props) {
   const money = useMoney()
   const { hidden } = usePrivacy()
   const uid = useId()
@@ -103,9 +105,9 @@ export function MonthlyChart({ rows, scope, mode, selected, onSelect, animKey }:
   function labelOf(r: MonthReport, k: number): string {
     const head = `${monthAbbr(r.competence)}${r.projected ? ', previsto' : ''}`
     if (mode === 'acumulado') return `${head}: acumulado ${acc[k] < 0 ? 'menos ' : ''}${money(Math.abs(acc[k]))}`
-    if (scope === 'pagar') return `${head}: a pagar ${money(r.payTotalCents)}`
+    if (scope === 'pagar') return `${head}: ${payLabel.toLowerCase()} ${money(r.payTotalCents)}`
     if (scope === 'receber') return `${head}: a receber ${money(r.recvTotalCents)}`
-    return `${head}: a pagar ${money(r.payTotalCents)}, a receber ${money(r.recvTotalCents)}`
+    return `${head}: ${payLabel.toLowerCase()} ${money(r.payTotalCents)}, a receber ${money(r.recvTotalCents)}`
   }
 
   const lineColor = scope === 'pagar' ? 'var(--pay)' : scope === 'receber' ? 'var(--recv)' : 'var(--muted)'
@@ -245,7 +247,7 @@ export function MonthlyChart({ rows, scope, mode, selected, onSelect, animKey }:
             <>
               {showPay && (
                 <span className="tip-row">
-                  <i className="tip-key key-pay" /> A pagar <strong>{money(tip.payTotalCents)}</strong>
+                  <i className="tip-key key-pay" /> {payLabel} <strong>{money(tip.payTotalCents)}</strong>
                 </span>
               )}
               {showRecv && (

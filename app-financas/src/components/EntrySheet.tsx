@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { payEntry, skipEntry, undoPayment, updateEntryDetails } from '../data/store'
+import { installmentLabel } from '../domain/bills'
 import { formatCompetence, formatDateBR } from '../domain/dates'
 import { amountDue, displayStatus, isFullyPaid } from '../domain/entries'
+import type { EntryLink } from '../domain/linked'
 import { useMoney } from '../data/privacy'
 import { centsToInput, parseBRLToCents } from '../domain/money'
+import { MoneyInput } from './MoneyInput'
 import type { Entry, IsoDate } from '../domain/types'
 import { DeleteButton } from './DeleteButton'
 import { StatusChip } from './StatusChip'
@@ -14,6 +17,8 @@ interface Props {
   today: IsoDate
   /** A conta ainda existe? Se não, o lançamento é só um resto e basta apagá-lo. */
   billExists?: boolean
+  /** Compras a receber ligadas à conta neste mês (veja `linkOfEntry`). */
+  link?: EntryLink | null
   onClose: () => void
 }
 
@@ -21,7 +26,7 @@ interface Props {
  * Folha de detalhe do lançamento. As gravações não esperam a confirmação do servidor:
  * o Firestore guarda localmente e sincroniza quando houver internet.
  */
-export function EntrySheet({ uid, entry, today, billExists = true, onClose }: Props) {
+export function EntrySheet({ uid, entry, today, billExists = true, link = null, onClose }: Props) {
   const money = useMoney()
   const [charged, setCharged] = useState(entry.chargedAmountCents === null ? '' : centsToInput(entry.chargedAmountCents))
   const [barcode, setBarcode] = useState(entry.barcode)
@@ -76,6 +81,7 @@ export function EntrySheet({ uid, entry, today, billExists = true, onClose }: Pr
             <h2>{entry.billName}</h2>
             <p className="muted">
               Vence em {formatDateBR(entry.dueDate)} · {entry.category}
+              {installmentLabel(entry) && ` · ${installmentLabel(entry)}`}
             </p>
           </div>
           <StatusChip status={status} />
@@ -96,7 +102,27 @@ export function EntrySheet({ uid, entry, today, billExists = true, onClose }: Pr
               <dd>{money(entry.paidAmountCents ?? 0)}</dd>
             </div>
           )}
+          {link && (
+            <>
+              <div>
+                <dt>A receber ({link.people.map((p) => p.name).join(', ')})</dt>
+                <dd>{money(link.receivableCents)}</dd>
+              </div>
+              <div>
+                <dt>Seu gasto real</dt>
+                <dd>
+                  <strong>{money(link.realCents)}</strong>
+                </dd>
+              </div>
+            </>
+          )}
         </dl>
+        {link && (
+          <p className="muted small-note">
+            {link.openCents > 0 ? `${money(link.openCents)} ainda não recebidos. ` : 'Tudo o que era para voltar já foi recebido. '}
+            O gasto real é o valor da conta menos o que as pessoas devolvem neste mês.
+          </p>
+        )}
 
         {error && (
           <p className="error" role="alert">
@@ -108,7 +134,7 @@ export function EntrySheet({ uid, entry, today, billExists = true, onClose }: Pr
           <h3>Dados da cobrança</h3>
           <label>
             Valor cobrado (se já chegou)
-            <input inputMode="decimal" placeholder="Ex.: 238,40" value={charged} onChange={(e) => setCharged(e.target.value)} />
+            <MoneyInput placeholder="Ex.: 238,40" value={charged} onChange={setCharged} />
           </label>
           <label>
             Linha digitável
@@ -133,7 +159,7 @@ export function EntrySheet({ uid, entry, today, billExists = true, onClose }: Pr
           <div className="row">
             <label>
               Valor pago
-              <input inputMode="decimal" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+              <MoneyInput value={payAmount} onChange={setPayAmount} />
             </label>
             <label>
               Data

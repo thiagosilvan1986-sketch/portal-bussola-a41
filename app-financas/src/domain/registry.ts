@@ -1,3 +1,4 @@
+import { MAX_BILL_INSTALLMENTS } from './bills'
 import { simplify } from './text'
 import type { Bill, PaymentMethod, Recurrence, ValueType } from './types'
 
@@ -27,6 +28,8 @@ export interface Template {
   valueType: ValueType
   paymentMethod: PaymentMethod
   supplier: string
+  /** Quantas parcelas a conta criada com este atalho já traz; ausente = sem fim. */
+  installmentCount?: number
 }
 
 export interface Registry {
@@ -190,6 +193,7 @@ export function normalizeRegistry(raw: unknown): Registry {
       const cents = typeof t.amountCents === 'number' && Number.isInteger(t.amountCents) && t.amountCents > 0 ? t.amountCents : 0
       const category = text(t.category, MAX_NAME)
       const payment = text(t.paymentMethod, 60)
+      const parcelas = typeof t.installmentCount === 'number' && Number.isInteger(t.installmentCount) && t.installmentCount >= 1 && t.installmentCount <= MAX_BILL_INSTALLMENTS ? t.installmentCount : null
       return {
         id: text(t.id, 60),
         name: text(t.name, MAX_TEMPLATE_NAME),
@@ -200,6 +204,7 @@ export function normalizeRegistry(raw: unknown): Registry {
         valueType: t.valueType === 'variable' ? 'variable' : 'fixed',
         paymentMethod: payments.some((p) => p.id === payment) ? payment : fallbackPayment,
         supplier: text(t.supplier, MAX_NAME),
+        ...(parcelas !== null ? { installmentCount: parcelas } : {}),
       }
     })
     templates = uniqueBy(
@@ -223,6 +228,20 @@ function checkName(raw: string, others: string[], max = MAX_NAME): Result<string
 }
 
 const withoutItem = (list: string[], item: string) => list.filter((x) => x !== item)
+
+/**
+ * Nome para a cópia de um cadastro: "Moradia (cópia)", depois "Moradia (cópia 2)" e assim por diante.
+ * Copiar uma cópia não empilha "(cópia) (cópia)", e o nome original é cortado se não couber no limite.
+ */
+export function copyName(label: string, taken: string[], max = MAX_NAME): string {
+  const base = label.replace(/\s*\(cópia(?: \d+)?\)\s*$/, '').trim() || label
+  const used = new Set(taken.map(simplify))
+  for (let n = 1; ; n++) {
+    const suffix = n === 1 ? ' (cópia)' : ` (cópia ${n})`
+    const candidate = `${base.slice(0, Math.max(1, max - suffix.length)).trimEnd()}${suffix}`
+    if (!used.has(simplify(candidate))) return candidate
+  }
+}
 
 /* ---------- Categorias ---------- */
 
@@ -343,6 +362,7 @@ export interface TemplateInput {
   valueType: ValueType
   paymentMethod: PaymentMethod
   supplier: string
+  installmentCount?: number | null
 }
 
 function newTemplateId(taken: Set<string>): string {
@@ -371,6 +391,10 @@ export function saveTemplate(reg: Registry, input: TemplateInput): Result<Regist
   }
   const supplier = input.supplier.trim()
   if (supplier.length > MAX_NAME) return fail(`O fornecedor deve ter até ${MAX_NAME} letras.`)
+  const parcelas = input.installmentCount ?? null
+  if (parcelas !== null && (!Number.isInteger(parcelas) || parcelas < 1 || parcelas > MAX_BILL_INSTALLMENTS)) {
+    return fail(`O número de parcelas deve ser de 1 a ${MAX_BILL_INSTALLMENTS}.`)
+  }
 
   const saved: Template = {
     id: input.id ?? newTemplateId(new Set(reg.templates.map((t) => t.id))),
@@ -382,6 +406,7 @@ export function saveTemplate(reg: Registry, input: TemplateInput): Result<Regist
     valueType: input.valueType,
     paymentMethod: input.paymentMethod,
     supplier,
+    ...(parcelas !== null ? { installmentCount: parcelas } : {}),
   }
   const templates = editing ? reg.templates.map((t) => (t.id === saved.id ? saved : t)) : [...reg.templates, saved]
   return ok({ ...reg, templates })
@@ -402,6 +427,17 @@ export function missingDefaultTemplates(reg: Registry): Template[] {
       category: reg.categories.includes(t.category) ? t.category : FALLBACK_CATEGORY,
       paymentMethod: reg.payments.some((p) => p.id === t.paymentMethod) ? t.paymentMethod : reg.payments[0].id,
     }))
+}
+
+/**
+ * Categoria sugerida pelo nome de uma conta nova: vale o nome igual (sem ligar para acento e caixa) de uma conta que a pessoa
+ * já tem ou de um atalho. A conta da própria pessoa vence o atalho. Devolve null se nada combina ou se a categoria saiu da lista.
+ */
+export function suggestCategory(reg: Registry, bills: Pick<Bill, 'name' | 'category'>[], name: string): string | null {
+  const key = simplify(name)
+  if (key === '') return null
+  const found = bills.find((b) => simplify(b.name) === key)?.category ?? reg.templates.find((t) => simplify(t.name) === key)?.category ?? null
+  return found !== null && reg.categories.includes(found) ? found : null
 }
 
 /** Atalhos que ainda cabem na tela Nova conta: some o que já está cadastrado como conta. */
