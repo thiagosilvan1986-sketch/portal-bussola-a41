@@ -1536,3 +1536,577 @@ td.balance-neg {
   font-weight: 650;
   overflow-wrap: anywhere;
 }
+
+/* ---- Relatórios: gráficos interativos ---- */
+:root {
+  /* Categorias (rosquinha, fluxo): paleta validada com validate_palette.js nos dois temas. */
+  --cat-1: #2a78d6;
+  --cat-2: #eb6834;
+  --cat-3: #6250d6;
+  --cat-4: #e87ba4;
+  --cat-5: #eda100;
+  --cat-other: #7b8598;
+  /* Mapa de vencimentos: 5 níveis de uma cor só, do mais claro ao mais escuro; o texto muda para manter o contraste. */
+  --heat-pay-1: #b7d3f6;
+  --heat-pay-2: #86b6ef;
+  --heat-pay-3: #3987e5;
+  --heat-pay-4: #1c5cab;
+  --heat-pay-5: #0d366b;
+  --heat-pay-t1: #0f172a;
+  --heat-pay-t2: #0f172a;
+  --heat-pay-t3: #0f172a;
+  --heat-pay-t4: #ffffff;
+  --heat-pay-t5: #ffffff;
+  --heat-recv-1: #c9efd9;
+  --heat-recv-2: #96ddb6;
+  --heat-recv-3: #4cbd88;
+  --heat-recv-4: #007d50;
+  --heat-recv-5: #005031;
+  --heat-recv-t1: #0f172a;
+  --heat-recv-t2: #0f172a;
+  --heat-recv-t3: #0f172a;
+  --heat-recv-t4: #ffffff;
+  --heat-recv-t5: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --cat-1: #3987e5;
+    --cat-2: #d95926;
+    --cat-3: #9085e9;
+    --cat-4: #d55181;
+    --cat-5: #c98500;
+    --cat-other: #7f8aa0;
+    /* No escuro, mais dinheiro = mais claro: o zero some no fundo e o maior valor brilha. */
+    --heat-pay-1: #1d3a66;
+    --heat-pay-2: #245192;
+    --heat-pay-3: #3987e5;
+    --heat-pay-4: #86b6ef;
+    --heat-pay-5: #cde2fb;
+    --heat-pay-t1: #e8edf6;
+    --heat-pay-t2: #e8edf6;
+    --heat-pay-t3: #0f172a;
+    --heat-pay-t4: #0f172a;
+    --heat-pay-t5: #0f172a;
+    --heat-recv-1: #103c28;
+    --heat-recv-2: #1b5a3e;
+    --heat-recv-3: #2fa573;
+    --heat-recv-4: #6bcf9d;
+    --heat-recv-5: #b6edce;
+    --heat-recv-t1: #e8edf6;
+    --heat-recv-t2: #e8edf6;
+    --heat-recv-t3: #0f172a;
+    --heat-recv-t4: #0f172a;
+    --heat-recv-t5: #0f172a;
+  }
+}
+
+.small {
+  font-size: 0.8rem;
+  margin: 0;
+}
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.segmented-small button {
+  min-height: 34px;
+  font-size: 0.85rem;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.card-head .segmented-small {
+  min-width: 190px;
+}
+.chip-btn[aria-pressed='true'] {
+  background: var(--info-bg);
+  color: var(--info-text);
+  border-color: var(--info-text);
+  font-weight: 700;
+}
+.chip-btn[aria-pressed='true']::before {
+  content: '✓ ';
+}
+
+.chart-wrap {
+  position: relative;
+}
+.chart-svg {
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.chart-tip {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 6px 18px rgba(2, 6, 23, 0.2);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.tip-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+.tip-row strong {
+  color: var(--text);
+  margin-left: auto;
+  padding-left: 8px;
+}
+.tip-key {
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+}
+.key-pay {
+  background: var(--pay);
+}
+.key-recv {
+  background: var(--recv);
+}
+.chart-guide {
+  stroke: var(--muted);
+  stroke-width: 1;
+  pointer-events: none;
+}
+.chart-zero {
+  stroke: var(--muted);
+}
+.chart-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 1000;
+  animation: line-draw 0.8s ease-out both;
+}
+.area-pos {
+  fill: var(--recv);
+  fill-opacity: 0.12;
+}
+.area-neg {
+  fill: var(--danger);
+  fill-opacity: 0.12;
+}
+.dot-pos,
+.dot-neg,
+.dot-pay,
+.dot-recv {
+  stroke: var(--card);
+  stroke-width: 2;
+}
+.dot-pos,
+.dot-recv {
+  fill: var(--recv);
+}
+.dot-neg {
+  fill: var(--danger);
+}
+.dot-pay {
+  fill: var(--pay);
+}
+.chart-group.hovered .chart-hit {
+  fill: var(--neutral-bg);
+}
+.chart-group:hover .bar-pay,
+.chart-group:hover .bar-recv,
+.chart-group.hovered .bar-pay,
+.chart-group.hovered .bar-recv {
+  filter: brightness(1.12);
+}
+.bar-grow {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: bar-grow 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.mark-pos,
+.mark-neg {
+  display: inline-block;
+  vertical-align: middle;
+}
+.mark-pos {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--recv);
+}
+.mark-neg {
+  width: 9px;
+  height: 9px;
+  background: var(--danger);
+  transform: rotate(45deg);
+}
+.insight {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+.insight-warn {
+  color: var(--danger);
+}
+.insight-ok {
+  color: var(--ok-text);
+}
+
+.sparkline {
+  display: block;
+  width: 96px;
+  height: 28px;
+  margin: 2px 0;
+}
+.spark-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.spark-dot {
+  stroke: var(--card);
+  stroke-width: 2;
+}
+.delta {
+  align-self: flex-start;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  white-space: normal;
+}
+.delta-none {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* Rosquinha e lista de categorias */
+.donut {
+  position: relative;
+  width: 204px;
+  height: 204px;
+  margin: 0 auto;
+}
+.donut-svg {
+  display: block;
+  width: 204px;
+  height: 204px;
+}
+.donut-arc {
+  cursor: pointer;
+  outline: none;
+  transition:
+    stroke-width 0.2s,
+    opacity 0.2s;
+  animation: donut-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.donut-arc.dim {
+  opacity: 0.35;
+}
+.donut-arc:focus-visible {
+  stroke-opacity: 0.7;
+}
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 40px;
+  text-align: center;
+  font-size: 0.75rem;
+  pointer-events: none;
+  line-height: 1.2;
+}
+.donut-center strong {
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+button.cat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.cat-row.active {
+  border-color: var(--info-text);
+  background: var(--info-bg);
+}
+.cat-row .bar-track,
+.cat-row .bar-fill {
+  display: block;
+}
+.cat-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.cat-row .cat-line {
+  align-items: baseline;
+}
+.cat-row .cat-line > span:last-child {
+  white-space: nowrap;
+}
+.cat-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: none;
+}
+.cat-hint {
+  font-size: 0.72rem;
+}
+.cat-detail {
+  scroll-margin-top: 84px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.cat-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cat-detail-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.trend-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.trend-table th,
+.trend-table td {
+  text-align: center;
+}
+
+/* Fluxo do dinheiro */
+.flow-link {
+  opacity: 0.3;
+  animation: flow-in 0.7s ease-out both;
+}
+.flow-link.flow-recv {
+  fill: var(--recv);
+}
+.flow-link.flow-gap {
+  fill: var(--danger);
+}
+.flow-name {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.flow-value {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.flow-target {
+  cursor: pointer;
+  outline: none;
+}
+.flow-target.dim {
+  opacity: 0.4;
+}
+.flow-target:focus-visible .chart-hit {
+  stroke: var(--primary);
+  stroke-width: 2;
+}
+.flow-target.active .chart-hit {
+  fill: var(--info-bg);
+}
+
+/* Mapa de vencimentos */
+.heat-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.heat-cell {
+  min-height: 40px;
+  aspect-ratio: 1 / 1;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.heat-cell[class*='lv-'] {
+  box-shadow: none;
+}
+.heat-cell.lv-0 {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.heat-cell.picked {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+.heat-pay .lv-1 {
+  background: var(--heat-pay-1);
+  color: var(--heat-pay-t1);
+}
+.heat-pay .lv-2 {
+  background: var(--heat-pay-2);
+  color: var(--heat-pay-t2);
+}
+.heat-pay .lv-3 {
+  background: var(--heat-pay-3);
+  color: var(--heat-pay-t3);
+}
+.heat-pay .lv-4 {
+  background: var(--heat-pay-4);
+  color: var(--heat-pay-t4);
+}
+.heat-pay .lv-5 {
+  background: var(--heat-pay-5);
+  color: var(--heat-pay-t5);
+}
+.heat-recv .lv-1 {
+  background: var(--heat-recv-1);
+  color: var(--heat-recv-t1);
+}
+.heat-recv .lv-2 {
+  background: var(--heat-recv-2);
+  color: var(--heat-recv-t2);
+}
+.heat-recv .lv-3 {
+  background: var(--heat-recv-3);
+  color: var(--heat-recv-t3);
+}
+.heat-recv .lv-4 {
+  background: var(--heat-recv-4);
+  color: var(--heat-recv-t4);
+}
+.heat-recv .lv-5 {
+  background: var(--heat-recv-5);
+  color: var(--heat-recv-t5);
+}
+.heat-scale {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.heat-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 12px;
+  border-radius: 3px;
+}
+.heat-list summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--info-text);
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+}
+.heat-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.heat-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes line-draw {
+  from {
+    stroke-dashoffset: 1000;
+  }
+}
+@keyframes donut-in {
+  from {
+    stroke-dasharray: 0 var(--circ);
+  }
+}
+@keyframes flow-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Transições do navegador (View Transitions): cada bloco troca sozinho, sem piscar a tela inteira. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+.vt-kpis {
+  view-transition-name: rep-kpis;
+}
+.vt-chart {
+  view-transition-name: rep-chart;
+}
+.vt-table {
+  view-transition-name: rep-table;
+}
+.vt-cats {
+  view-transition-name: rep-cats;
+}
+.vt-flow {
+  view-transition-name: rep-flow;
+}
+.vt-heat {
+  view-transition-name: rep-heat;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-grow,
+  .chart-line,
+  .donut-arc,
+  .flow-link {
+    animation: none;
+  }
+  .donut-arc {
+    transition: none;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

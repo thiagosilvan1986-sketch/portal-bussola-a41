@@ -1,16 +1,31 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { MonthlyChart } from '../components/MonthlyChart'
+import { CategorySection } from '../components/CategorySection'
+import { Delta } from '../components/Delta'
+import { DueHeatmap } from '../components/DueHeatmap'
+import { FlowChart } from '../components/FlowChart'
+import { MonthlyChart, type ChartMode } from '../components/MonthlyChart'
+import { Sparkline } from '../components/Sparkline'
 import { useBills, useEntriesRange, usePeople, useReceivables, useToday } from '../data/hooks'
 import { useMoney, usePrivacy } from '../data/privacy'
+import { withTransition } from '../data/transition'
 import { formatCompetence } from '../domain/dates'
 import {
+  OTHER_CATEGORIES,
   PERIOD_KINDS,
   PERIOD_LABEL,
-  byCategory,
+  PREVIOUS_LABEL,
+  SCOPES,
+  SCOPE_LABEL,
+  categorySlices,
+  coverage,
+  cumulativeSeries,
+  dueDayMap,
   entriesWithProjection,
   expectedBalance,
+  firstShortfall,
+  flowModel,
   monthAbbr,
   monthlyReport,
   percentDone,
@@ -18,11 +33,14 @@ import {
   periodOf,
   periodSpan,
   periodTitle,
+  rankCategories,
   realizedBalance,
+  savingsRate,
   shiftPeriod,
   sumMonths,
   topDebtors,
   type PeriodKind,
+  type Scope,
 } from '../domain/reports'
 
 const BALANCE_TONE = { pos: 'ok', neg: 'danger', zero: 'neutral' } as const
@@ -33,6 +51,11 @@ function balanceView(cents: number): { tone: 'pos' | 'neg' | 'zero'; icon: strin
   return { tone: 'zero', icon: '＝', word: 'Equilibrado' }
 }
 
+const MODES: { id: ChartMode; label: string }[] = [
+  { id: 'barras', label: 'Barras' },
+  { id: 'acumulado', label: 'Acumulado' },
+]
+
 export default function Reports() {
   const money = useMoney()
   const { hidden } = usePrivacy()
@@ -40,51 +63,119 @@ export default function Reports() {
   const today = useToday()
   const [kind, setKind] = useState<PeriodKind>('trimestre')
   const [offset, setOffset] = useState(0)
+  const [scope, setScope] = useState<Scope>('tudo')
+  const [category, setCategory] = useState<string | null>(null)
+  const [mode, setMode] = useState<ChartMode>('barras')
   const [selected, setSelected] = useState<string | null>(null)
 
   const period = useMemo(() => shiftPeriod(periodOf(kind, today), offset), [kind, offset, today])
   const months = useMemo(() => periodMonths(period), [period])
+  const previous = useMemo(() => periodMonths(shiftPeriod(period, -1)), [period])
   const from = months[0]
   const to = months[months.length - 1]
 
   const bills = useBills(uid)
   const people = usePeople(uid)
   const receivables = useReceivables(uid)
+  // O período anterior vem primeiro; a consulta do período mostrado é sempre a última.
+  const before = useEntriesRange(uid, previous[0], previous[previous.length - 1])
   const entries = useEntriesRange(uid, from, to)
 
   const view = useMemo(() => {
-    const projection = entriesWithProjection(entries.data, bills.data, months, today)
-    const rows = monthlyReport(months, projection.entries, receivables.data, today, projection.projectedMonths)
+    const now = entriesWithProjection(entries.data, bills.data, months, today)
+    const prev = entriesWithProjection(before.data, bills.data, previous, today)
+    const slices = categorySlices(now.entries, months, 5)
+    const ranked = rankCategories(now.entries, months)
+    const members =
+      category === null ? null : category === OTHER_CATEGORIES ? (slices.find((s) => s.category === OTHER_CATEGORIES)?.members ?? []) : [category]
+    const pick = (list: typeof now.entries) => (members ? list.filter((e) => members.includes(e.category)) : list)
+    const wantPay = scope !== 'receber'
+    const wantRecv = scope !== 'pagar'
+    const payNow = wantPay ? pick(now.entries) : []
+    const payBefore = wantPay ? pick(prev.entries) : []
+    const recv = wantRecv ? receivables.data : []
+    const recvAll = sumMonths(monthlyReport(months, [], receivables.data, today)).recvTotalCents
+    const rows = monthlyReport(months, payNow, recv, today, wantPay ? now.projectedMonths : new Set())
+    const beforeRows = monthlyReport(previous, payBefore, recv, today)
     return {
       rows,
       totals: sumMonths(rows),
-      categories: byCategory(projection.entries, months),
+      before: sumMonths(beforeRows),
+      slices,
+      ranked,
+      allEntries: now.entries,
+      heat: dueDayMap(pick(now.entries), receivables.data, months, scope === 'receber' ? 'receber' : 'pagar'),
+      hasAny: slices.length > 0 || recvAll > 0,
+      flow: scope !== 'receber' ? flowModel(slices, recvAll) : null,
       debtors: topDebtors(receivables.data, people.data, months, today),
-      hasProjection: projection.projectedMonths.size > 0,
+      hasProjection: wantPay && now.projectedMonths.size > 0,
     }
-  }, [entries.data, bills.data, receivables.data, people.data, months, today])
+  }, [entries.data, before.data, bills.data, receivables.data, people.data, months, previous, today, scope, category])
 
-  const ready = entries.ready && bills.ready && receivables.ready && people.ready
-  const failed = entries.error || bills.error || receivables.error
+  const ready = entries.ready && before.ready && bills.ready && receivables.ready && people.ready
+  const failed = entries.error || before.error || bills.error || receivables.error
   const { totals, rows } = view
+  const showPay = scope !== 'receber'
+  const showRecv = scope !== 'pagar'
   const expected = balanceView(expectedBalance(totals))
   const realized = realizedBalance(totals)
   const overdue = totals.payOverdueCents + totals.recvOverdueCents
-  const empty = totals.payTotalCents === 0 && totals.recvTotalCents === 0
+  const empty = !view.hasAny
   const detail = rows.find((r) => r.competence === selected) ?? null
+  const versus = PREVIOUS_LABEL[kind]
+  const hasBefore = view.before.payTotalCents + view.before.recvTotalCents > 0
+  const rate = savingsRate(totals)
+  const cover = coverage(totals)
+  const acc = cumulativeSeries(rows, scope)
+  const shortfall = scope === 'tudo' ? firstShortfall(rows, acc) : null
+  const animKey = `${kind}-${offset}-${scope}-${category ?? ''}-${mode}`
+  const sectionKey = `${kind}-${offset}`
 
   // Sinal explícito no saldo da tabela (− falta, + sobra): a cor não é a única pista. Oculto, não revela nem o sinal.
   const signed = (cents: number) => (hidden || cents === 0 ? money(cents) : `${cents < 0 ? '−' : '+'}${money(Math.abs(cents))}`)
 
   function chooseKind(next: PeriodKind) {
-    setKind(next)
-    setOffset(0)
-    setSelected(null)
+    withTransition(() => {
+      setKind(next)
+      setOffset(0)
+      setSelected(null)
+    })
   }
   function move(delta: number) {
-    setOffset(offset + delta)
-    setSelected(null)
+    withTransition(() => {
+      setOffset(offset + delta)
+      setSelected(null)
+    })
   }
+  // "Tudo" e "A receber" não têm categoria: escolher um deles limpa a categoria. Escolher uma categoria mostra só A pagar.
+  function chooseScope(next: Scope) {
+    withTransition(() => {
+      setScope(next)
+      if (next !== 'pagar') setCategory(null)
+      setSelected(null)
+    })
+  }
+  function chooseCategory(next: string | null) {
+    withTransition(() => {
+      setCategory(next)
+      if (next !== null) setScope('pagar')
+      setSelected(null)
+    })
+  }
+  function chooseMode(next: ChartMode) {
+    withTransition(() => setMode(next))
+  }
+  // Quem toca na rosquinha, na lista ou no fluxo quer ver as contas da categoria: leva até elas.
+  function pickCategory(next: string | null) {
+    chooseCategory(next)
+    if (next === null) return
+    requestAnimationFrame(() => {
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      document.getElementById('cat-detail')?.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    })
+  }
+
+  const chips = category === OTHER_CATEGORIES ? [...view.ranked.map((c) => c.category), OTHER_CATEGORIES] : view.ranked.map((c) => c.category)
 
   return (
     <main className="page">
@@ -124,6 +215,28 @@ export default function Reports() {
         </button>
       </header>
 
+      <div className="filters" role="group" aria-label="Filtros do relatório">
+        <div className="segmented segmented-small" role="group" aria-label="O que mostrar">
+          {SCOPES.map((s) => (
+            <button key={s} type="button" aria-pressed={s === scope} onClick={() => chooseScope(s)}>
+              {SCOPE_LABEL[s]}
+            </button>
+          ))}
+        </div>
+        {scope !== 'receber' && chips.length > 0 && (
+          <div className="chips chips-scroll" role="group" aria-label="Categoria">
+            <button type="button" className="chip-btn" aria-pressed={category === null} onClick={() => chooseCategory(null)}>
+              Todas
+            </button>
+            {chips.map((c) => (
+              <button key={c} type="button" className="chip-btn" aria-pressed={category === c} onClick={() => chooseCategory(category === c ? null : c)}>
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {failed && (
         <p className="error" role="alert">
           Não foi possível carregar os dados. Verifique a conexão.
@@ -134,41 +247,59 @@ export default function Reports() {
         <p className="muted center-text">Carregando…</p>
       ) : (
         <>
-          <section className="kpis" aria-label="Resumo do período">
-            <div className="card kpi tone-pay">
-              <span className="muted">A pagar</span>
-              <strong>{money(totals.payTotalCents)}</strong>
-              <div className="meter" aria-hidden="true">
-                <div className="meter-fill" style={{ width: `${percentDone(totals.payPaidCents, totals.payTotalCents)}%` }} />
+          <section className="kpis vt-kpis" aria-label="Resumo do período">
+            {showPay && (
+              <div className={`card kpi tone-pay${scope === 'pagar' ? ' kpi-wide' : ''}`}>
+                <span className="muted">A pagar</span>
+                <strong>{money(totals.payTotalCents)}</strong>
+                <Sparkline values={rows.map((r) => r.payTotalCents)} color="var(--pay)" />
+                <div className="meter" aria-hidden="true">
+                  <div className="meter-fill" style={{ width: `${percentDone(totals.payPaidCents, totals.payTotalCents)}%` }} />
+                </div>
+                <span className="muted">Pago {money(totals.payPaidCents)}</span>
+                <span className="muted">Em aberto {money(totals.payOpenCents)}</span>
+                <Delta now={totals.payTotalCents} before={view.before.payTotalCents} goodWhen="down" versus={versus} />
               </div>
-              <span className="muted">Pago {money(totals.payPaidCents)}</span>
-              <span className="muted">Em aberto {money(totals.payOpenCents)}</span>
-            </div>
-            <div className="card kpi tone-recv">
-              <span className="muted">A receber</span>
-              <strong>{money(totals.recvTotalCents)}</strong>
-              <div className="meter" aria-hidden="true">
-                <div className="meter-fill" style={{ width: `${percentDone(totals.recvReceivedCents, totals.recvTotalCents)}%` }} />
+            )}
+            {showRecv && (
+              <div className={`card kpi tone-recv${scope === 'receber' ? ' kpi-wide' : ''}`}>
+                <span className="muted">A receber</span>
+                <strong>{money(totals.recvTotalCents)}</strong>
+                <Sparkline values={rows.map((r) => r.recvTotalCents)} color="var(--recv)" />
+                <div className="meter" aria-hidden="true">
+                  <div className="meter-fill" style={{ width: `${percentDone(totals.recvReceivedCents, totals.recvTotalCents)}%` }} />
+                </div>
+                <span className="muted">Recebido {money(totals.recvReceivedCents)}</span>
+                <span className="muted">Em aberto {money(totals.recvOpenCents)}</span>
+                <Delta now={totals.recvTotalCents} before={view.before.recvTotalCents} goodWhen="up" versus={versus} />
               </div>
-              <span className="muted">Recebido {money(totals.recvReceivedCents)}</span>
-              <span className="muted">Em aberto {money(totals.recvOpenCents)}</span>
-            </div>
-            <div className={`card kpi kpi-wide balance-${expected.tone} tone-${BALANCE_TONE[expected.tone]}`}>
-              <span className="muted">Saldo previsto do período</span>
-              <strong>
-                <span aria-hidden="true">{expected.icon}</span> {expected.word} {money(Math.abs(expectedBalance(totals)))}
-              </strong>
-              <span className="muted">
-                A receber menos a pagar. Realizado até agora: {realized < 0 ? 'menos ' : ''}
-                {money(Math.abs(realized))}
-              </span>
-            </div>
+            )}
+            {scope === 'tudo' && (
+              <div className={`card kpi kpi-wide balance-${expected.tone} tone-${BALANCE_TONE[expected.tone]}`}>
+                <span className="muted">Saldo previsto do período</span>
+                <strong>
+                  <span aria-hidden="true">{expected.icon}</span> {expected.word} {money(Math.abs(expectedBalance(totals)))}
+                </strong>
+                <span className="muted">
+                  A receber menos a pagar. Realizado até agora: {realized < 0 ? 'menos ' : ''}
+                  {money(Math.abs(realized))}
+                </span>
+                {rate !== null ? (
+                  <span className="muted">Sobram {rate}% do que entra.</span>
+                ) : cover !== null && totals.recvTotalCents > 0 ? (
+                  <span className="muted">O que entra cobre {cover}% do que sai.</span>
+                ) : null}
+                {hasBefore && <Delta as="money" now={expectedBalance(totals)} before={expectedBalance(view.before)} goodWhen="up" versus={versus} />}
+              </div>
+            )}
           </section>
 
           {overdue > 0 && (
             <p className="banner banner-danger" role="status">
               <span aria-hidden="true">⚠ </span>
-              Em atraso no período: a pagar {money(totals.payOverdueCents)} · a receber {money(totals.recvOverdueCents)}
+              Em atraso no período: {showPay && <>a pagar {money(totals.payOverdueCents)}</>}
+              {showPay && showRecv && ' · '}
+              {showRecv && <>a receber {money(totals.recvOverdueCents)}</>}
             </p>
           )}
 
@@ -179,40 +310,94 @@ export default function Reports() {
             </div>
           ) : (
             <>
-              <section className="card stack chart-card" aria-label="Mês a mês">
-                <h2>Mês a mês</h2>
-                <ul className="legend" aria-label="Legenda">
-                  <li>
-                    <span className="swatch swatch-pay" aria-hidden="true" /> A pagar
-                  </li>
-                  <li>
-                    <span className="swatch swatch-recv" aria-hidden="true" /> A receber
-                  </li>
-                </ul>
-                <MonthlyChart rows={rows} selected={selected} onSelect={setSelected} />
+              <section className="card stack chart-card vt-chart" aria-label="Mês a mês">
+                <div className="card-head">
+                  <h2>Mês a mês</h2>
+                  <div className="segmented segmented-small" role="group" aria-label="Tipo de gráfico">
+                    {MODES.map((m) => (
+                      <button key={m.id} type="button" aria-pressed={m.id === mode} onClick={() => chooseMode(m.id)}>
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {scope === 'tudo' && mode === 'barras' && (
+                  <ul className="legend" aria-label="Legenda">
+                    <li>
+                      <span className="swatch swatch-pay" aria-hidden="true" /> A pagar
+                    </li>
+                    <li>
+                      <span className="swatch swatch-recv" aria-hidden="true" /> A receber
+                    </li>
+                  </ul>
+                )}
+                {scope === 'tudo' && mode === 'acumulado' && (
+                  <ul className="legend" aria-label="Legenda">
+                    <li>
+                      <span className="mark-pos" aria-hidden="true" /> Sobra
+                    </li>
+                    <li>
+                      <span className="mark-neg" aria-hidden="true" /> Falta
+                    </li>
+                  </ul>
+                )}
+                {scope !== 'tudo' && (
+                  <p className="muted small">
+                    {scope === 'pagar' ? 'Só contas a pagar' : 'Só valores a receber'}
+                    {category ? ` · ${category}` : ''}
+                    {mode === 'acumulado' ? ', somando mês a mês.' : '.'}
+                  </p>
+                )}
+                <MonthlyChart rows={rows} scope={scope} mode={mode} selected={selected} onSelect={setSelected} animKey={animKey} />
                 <p className="chart-readout" aria-live="polite">
                   {detail ? (
                     <>
                       <strong>{formatCompetence(detail.competence)}</strong>
-                      {detail.projected ? ' (previsto)' : ''}: a pagar {money(detail.payTotalCents)} (pago {money(detail.payPaidCents)}) · a receber{' '}
-                      {money(detail.recvTotalCents)} (recebido {money(detail.recvReceivedCents)})
+                      {detail.projected ? ' (previsto)' : ''}
+                      {showPay && (
+                        <>
+                          : a pagar {money(detail.payTotalCents)} (pago {money(detail.payPaidCents)})
+                        </>
+                      )}
+                      {showPay && showRecv && ' ·'}
+                      {showRecv && (
+                        <>
+                          {showPay ? ' ' : ': '}a receber {money(detail.recvTotalCents)} (recebido {money(detail.recvReceivedCents)})
+                        </>
+                      )}
+                      {mode === 'acumulado' && (
+                        <>
+                          {' '}
+                          · acumulado {scope === 'tudo' && acc[rows.indexOf(detail)] < 0 ? 'menos ' : ''}
+                          {money(Math.abs(acc[rows.indexOf(detail)]))}
+                        </>
+                      )}
                     </>
                   ) : (
-                    <span className="muted">Toque em um mês do gráfico para ver os valores.</span>
+                    <>
+                      <span className="muted">Toque em um mês do gráfico para ver os valores.</span>{' '}
+                      <span className="muted">Arraste o dedo para comparar os meses.</span>
+                    </>
                   )}
                 </p>
+                {scope === 'tudo' && mode === 'acumulado' && (
+                  <p className={`insight ${shortfall ? 'insight-warn' : 'insight-ok'}`}>
+                    <span aria-hidden="true">{shortfall ? '▼ ' : '▲ '}</span>
+                    {shortfall ? `Falta dinheiro a partir de ${monthAbbr(shortfall)}.` : 'O saldo acumulado não fica negativo neste período.'}
+                  </p>
+                )}
               </section>
 
-              <section className="card stack" aria-label="Detalhamento por mês">
+              <section className="card stack vt-table" aria-label="Detalhamento por mês">
                 <h2>Detalhamento</h2>
                 <div className="table-wrap">
                   <table className="report-table">
                     <thead>
                       <tr>
                         <th scope="col">Mês</th>
-                        <th scope="col">A pagar</th>
-                        <th scope="col">A receber</th>
-                        <th scope="col">Saldo</th>
+                        {showPay && <th scope="col">A pagar</th>}
+                        {showRecv && <th scope="col">A receber</th>}
+                        {scope === 'tudo' && <th scope="col">Saldo</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -224,12 +409,14 @@ export default function Reports() {
                               {monthAbbr(r.competence)}
                               {r.projected ? '*' : ''}
                             </th>
-                            <td>{money(r.payTotalCents)}</td>
-                            <td>{money(r.recvTotalCents)}</td>
-                            <td className={`balance-${b.tone}`}>
-                              {signed(r.recvTotalCents - r.payTotalCents)}
-                              <span className="sr-only"> {b.word.toLowerCase()}</span>
-                            </td>
+                            {showPay && <td>{money(r.payTotalCents)}</td>}
+                            {showRecv && <td>{money(r.recvTotalCents)}</td>}
+                            {scope === 'tudo' && (
+                              <td className={`balance-${b.tone}`}>
+                                {signed(r.recvTotalCents - r.payTotalCents)}
+                                <span className="sr-only"> {b.word.toLowerCase()}</span>
+                              </td>
+                            )}
                           </tr>
                         )
                       })}
@@ -237,12 +424,14 @@ export default function Reports() {
                     <tfoot>
                       <tr>
                         <th scope="row">Total</th>
-                        <td>{money(totals.payTotalCents)}</td>
-                        <td>{money(totals.recvTotalCents)}</td>
-                        <td className={`balance-${expected.tone}`}>
-                          {signed(expectedBalance(totals))}
-                          <span className="sr-only"> {expected.word.toLowerCase()}</span>
-                        </td>
+                        {showPay && <td>{money(totals.payTotalCents)}</td>}
+                        {showRecv && <td>{money(totals.recvTotalCents)}</td>}
+                        {scope === 'tudo' && (
+                          <td className={`balance-${expected.tone}`}>
+                            {signed(expectedBalance(totals))}
+                            <span className="sr-only"> {expected.word.toLowerCase()}</span>
+                          </td>
+                        )}
                       </tr>
                     </tfoot>
                   </table>
@@ -250,28 +439,42 @@ export default function Reports() {
                 {view.hasProjection && <p className="small-note">* Mês sem lançamento ainda: usa o valor previsto das contas cadastradas.</p>}
               </section>
 
-              {view.categories.length > 0 && (
-                <section className="card stack" aria-label="Contas a pagar por categoria">
-                  <h2>Para onde vai o dinheiro</h2>
-                  <ul className="cat-list">
-                    {view.categories.map((c) => (
-                      <li key={c.category}>
-                        <div className="cat-line">
-                          <span>{c.category}</span>
-                          <span>
-                            <strong>{money(c.totalCents)}</strong> <span className="muted">· {c.share}%</span>
-                          </span>
-                        </div>
-                        <div className="bar-track" aria-hidden="true">
-                          <div className="bar-fill" style={{ width: `${Math.max(c.share, 2)}%` }} />
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+              {showPay && view.slices.length > 0 && (
+                <div className="vt-cats">
+                  <CategorySection
+                    slices={view.slices}
+                    entries={view.allEntries}
+                    months={months}
+                    today={today}
+                    category={category}
+                    onSelect={pickCategory}
+                    onFilter={chooseCategory}
+                    animKey={sectionKey}
+                  />
+                </div>
+              )}
+
+              {view.flow && (
+                <section className="card stack vt-flow" aria-label="Fluxo do dinheiro">
+                  <h2>Fluxo do dinheiro</h2>
+                  <p className="muted small">
+                    O que entra (verde) se divide entre as categorias. Quando as contas passam do que entra, a <strong>▼ Falta</strong> (vermelho) completa o
+                    fluxo. Toque numa categoria para ver as contas dela.
+                  </p>
+                  <FlowChart model={view.flow} active={category} onSelect={pickCategory} animKey={sectionKey} />
                 </section>
               )}
 
-              {view.debtors.length > 0 && (
+              <section className="card stack vt-heat" aria-label="Mapa de vencimentos">
+                <h2>Mapa de vencimentos</h2>
+                <p className="muted small">
+                  {scope === 'receber' ? 'Dias em que as parcelas a receber vencem' : 'Dias em que as contas a pagar vencem'}, somando os meses do período.
+                  {scope === 'tudo' ? ' Escolha A receber nos filtros para ver as parcelas.' : ''}
+                </p>
+                <DueHeatmap key={`${scope}-${category ?? ''}-${sectionKey}`} days={view.heat} tone={scope === 'receber' ? 'receber' : 'pagar'} />
+              </section>
+
+              {showRecv && view.debtors.length > 0 && (
                 <section className="card stack" aria-label="Quem mais deve">
                   <h2>Quem mais deve neste período</h2>
                   <ul className="list">

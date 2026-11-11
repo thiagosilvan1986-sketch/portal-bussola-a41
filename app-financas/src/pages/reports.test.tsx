@@ -218,6 +218,134 @@ describe('Relatórios', () => {
     expect(screen.queryByText(/Mês sem lançamento ainda/)).toBeNull()
   })
 
+  it('compara com o período anterior e avisa quando não há base de comparação', () => {
+    // 3º trimestre (jul a set): só o aluguel, 1.000 por mês = 3.000. Agora: 3.600 (+20%).
+    hooks.useEntriesRange.mockImplementation((_uid: string, from: string) =>
+      live(from === '2026-07' ? ['2026-07', '2026-08', '2026-09'].map((c) => buildEntry(aluguel, c)) : entries),
+    )
+    renderReports()
+    expect(flat(kpi('A pagar').textContent)).toContain('▲ 20% a mais que o trimestre anterior')
+    expect(flat(kpi('A receber').textContent)).toContain('Sem dados no trimestre anterior')
+    // Saldo: agora −3.300; antes −3.000 (nada a receber) → R$ 300,00 pior
+    expect(flat(kpi('Saldo previsto do período').textContent)).toContain('▼ R$ 300,00 pior que o trimestre anterior')
+    expect(flat(kpi('Saldo previsto do período').textContent)).toContain('O que entra cobre 8% do que sai.')
+  })
+
+  it('filtra por A pagar, por A receber e por categoria, sempre pelo mesmo recorte', () => {
+    renderReports()
+    expect(kpi('A pagar')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'A pagar' }))
+    expect(kpi('A receber')).toBeUndefined()
+    expect(kpi('Saldo previsto do período')).toBeUndefined()
+    expect(within(screen.getByRole('table')).queryByRole('columnheader', { name: 'A receber' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Quem mais deve' })).toBeNull()
+
+    // Escolher uma categoria mostra só o que ela paga; "Todas" volta ao total.
+    fireEvent.click(within(screen.getByRole('group', { name: 'Categoria' })).getByRole('button', { name: 'Moradia' }))
+    expect(flat(kpi('A pagar').textContent)).toContain('R$ 3.000,00')
+    expect(screen.getByRole('button', { name: 'Moradia' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Todas' }))
+    expect(flat(kpi('A pagar').textContent)).toContain('R$ 3.600,00')
+
+    fireEvent.click(screen.getByRole('button', { name: 'A receber' }))
+    expect(kpi('A pagar')).toBeUndefined()
+    expect(flat(kpi('A receber').textContent)).toContain('R$ 300,00')
+    expect(screen.queryByRole('group', { name: 'Categoria' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Contas a pagar por categoria' })).toBeNull()
+    expect(flat(screen.getByRole('status').textContent)).toBe('⚠ Em atraso no período: a receber R$ 100,00')
+    expect(flat(screen.getByRole('region', { name: 'Mapa de vencimentos' }).textContent)).toContain('parcelas a receber')
+
+    // Escolher "Tudo" de novo limpa a categoria e traz tudo de volta.
+    fireEvent.click(screen.getByRole('button', { name: 'Tudo' }))
+    expect(flat(kpi('A pagar').textContent)).toContain('R$ 3.600,00')
+  })
+
+  it('o gráfico troca entre barras e acumulado e avisa em que mês falta dinheiro', () => {
+    renderReports()
+    expect(screen.queryByText(/Falta dinheiro a partir de/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Acumulado' }))
+    expect(screen.getByRole('group', { name: 'Gráfico de linha com o valor acumulado mês a mês' })).toBeTruthy()
+    // Outubro: entra 100, sai 1.200 → falta já no primeiro mês; acumulado de out = −1.100
+    expect(screen.getByRole('button', { name: /^out: acumulado menos R\$.1\.100,00/ })).toBeTruthy()
+    expect(flat(document.querySelector('.insight')!.textContent)).toContain('Falta dinheiro a partir de out.')
+    fireEvent.click(screen.getByRole('button', { name: /^nov: acumulado/ }))
+    expect(flat(document.querySelector('.chart-readout')!.textContent)).toContain('acumulado menos R$ 2.200,00')
+    fireEvent.click(screen.getByRole('button', { name: 'Barras' }))
+    expect(screen.getByRole('group', { name: 'Gráfico de barras por mês' })).toBeTruthy()
+  })
+
+  it('arrastar sobre o gráfico mostra os valores do mês sob o dedo', () => {
+    renderReports()
+    const wrap = document.querySelector('.chart-wrap') as HTMLElement
+    wrap.getBoundingClientRect = () => ({ left: 0, top: 0, width: 360, height: 196, right: 360, bottom: 196, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
+    const svg = document.querySelector('.chart-svg')!
+    expect(document.querySelector('.chart-tip')).toBeNull()
+    // largura útil: 64 a 352 de 360; 3 meses de 96; o meio do segundo mês fica em x = 64 + 96 + 48 = 208
+    fireEvent.pointerMove(svg, { clientX: 208, pointerType: 'mouse' })
+    const tip = flat(document.querySelector('.chart-tip')!.textContent)
+    expect(tip).toContain('nov')
+    expect(tip).toContain('A pagar R$ 1.200,00')
+    expect(tip).toContain('A receber R$ 100,00')
+    fireEvent.pointerLeave(svg, { pointerType: 'mouse' })
+    expect(document.querySelector('.chart-tip')).toBeNull()
+  })
+
+  it('o mapa de vencimentos soma o que vence em cada dia e lista os dias com conta', () => {
+    renderReports()
+    const map = screen.getByRole('region', { name: 'Mapa de vencimentos' })
+    // aluguel dia 10 (out, nov, dez) = 3.000; energia dia 5 = 600
+    const day10 = within(map).getByRole('button', { name: /^Dia 10: R\$.3\.000,00, 3 vencimentos/ })
+    expect(within(map).getByRole('button', { name: 'Dia 11: nada vence' })).toBeTruthy()
+    expect(flat(map.textContent)).toContain('Dia mais carregado: dia 10')
+    fireEvent.click(day10)
+    expect(flat(map.querySelector('.chart-readout')!.textContent)).toContain('Dia 10: R$ 3.000,00 em 3 vencimentos')
+    expect(day10.getAttribute('aria-pressed')).toBe('true')
+    const list = map.querySelector('.heat-list')!
+    expect(list.querySelectorAll('li')).toHaveLength(2)
+  })
+
+  it('o fluxo do dinheiro fecha os dois lados e escolher uma categoria nele abre as contas dela', () => {
+    renderReports()
+    const flow = screen.getByRole('region', { name: 'Fluxo do dinheiro' })
+    // entra 300; sai 3.600; falta 3.300
+    expect(flat(flow.textContent)).toContain('▼ Falta')
+    expect(flat(flow.textContent)).toContain('R$ 3.300,00')
+    const moradia = within(flow).getByRole('button', { name: /^Moradia: R\$.3\.000,00, 83% do que sai/ })
+    fireEvent.click(moradia)
+    // vira filtro de categoria (só A pagar); o fluxo continua à vista, com a categoria em destaque
+    expect(within(screen.getByRole('region', { name: 'Fluxo do dinheiro' })).getByRole('button', { name: /^Moradia/ }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'A pagar' }).getAttribute('aria-pressed')).toBe('true')
+    const detail = screen.getByRole('group', { name: 'Contas de Moradia' })
+    const link = within(detail).getAllByRole('link')[0]
+    expect(link.getAttribute('href')).toBe('/contas/b2')
+    expect(flat(detail.textContent)).toContain('Aluguel')
+    expect(flat(detail.textContent)).toContain('R$ 1.000,00')
+    fireEvent.click(within(detail).getByRole('button', { name: 'Ver todas as categorias' }))
+    expect(screen.queryByRole('group', { name: 'Contas de Moradia' })).toBeNull()
+    expect(within(screen.getByRole('region', { name: 'Fluxo do dinheiro' })).getByRole('button', { name: /^Moradia/ }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('a rosquinha e a lista de categorias escolhem a mesma categoria', () => {
+    renderReports()
+    const cats = screen.getByRole('region', { name: 'Contas a pagar por categoria' })
+    const slice = within(cats).getByRole('button', { name: /^Contas de consumo: R\$.600,00, 17% das contas a pagar/ })
+    fireEvent.click(slice)
+    expect(slice.getAttribute('aria-pressed')).toBe('true')
+    expect(within(cats).getAllByRole('button', { pressed: true }).length).toBeGreaterThanOrEqual(2) // fatia + linha da lista
+    expect(screen.getByRole('group', { name: 'Contas de Contas de consumo' })).toBeTruthy()
+    fireEvent.click(slice)
+    expect(screen.queryByRole('group', { name: 'Contas de Contas de consumo' })).toBeNull()
+  })
+
+  it('com o olhinho fechado, nada novo mostra valor (fluxo, mapa, acumulado, categoria)', () => {
+    localStorage.setItem('contas-em-dia:ocultar-valores', '1')
+    renderReports()
+    fireEvent.click(screen.getByRole('button', { name: 'Acumulado' }))
+    fireEvent.click(within(screen.getByRole('region', { name: 'Fluxo do dinheiro' })).getByRole('button', { name: /^Moradia/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Dia 10/ }))
+    expect(document.body.textContent).not.toMatch(/\d\.\d{3},\d{2}|\d+,\d{2}/)
+  })
+
   it('mostra carregando enquanto os dados não chegam', () => {
     hooks.useEntriesRange.mockReturnValue({ data: [], ready: false, error: null })
     renderReports()
