@@ -461,9 +461,10 @@ describe('Sobre', () => {
     expect(within(bloco).getByRole('heading', { name: 'Por que o Contas em Dia existe' })).toBeTruthy()
     expect(bloco.textContent).toContain('fechar o mês sem susto e ajudar a realizar suas cobranças que tem a receber sem esquecimento.')
     expect(bloco.textContent).not.toContain('🛡')
-    const icone = bloco.querySelector('svg.purpose-icon')
+    const icone = bloco.querySelector('img.purpose-icon')
     expect(icone).not.toBeNull()
-    expect(icone!.getAttribute('aria-hidden')).toBe('true')
+    expect(icone!.getAttribute('src')).toBe('/alvo.webp')
+    expect(icone!.getAttribute('alt')).toBe('') // enfeite: leitor de tela não precisa ler
   })
 })
 

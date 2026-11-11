@@ -2196,8 +2196,9 @@ button.cat-row.active {
 }
 .purpose-icon {
   flex: none;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
 }
 .purpose h3 {
   margin: 0 0 4px;

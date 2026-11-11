@@ -14,18 +14,7 @@ export default function About() {
           <p className="muted">O que você paga e o que te devem, sob controle e sem planilha.</p>
         </div>
         <aside className="purpose" aria-labelledby="purpose-title">
-          <svg className="purpose-icon" viewBox="0 0 64 64" width="44" height="44" aria-hidden="true" focusable="false">
-            <ellipse cx="29" cy="37" rx="25" ry="23" fill="#8f1d1d" />
-            <circle cx="28" cy="34" r="24" fill="#e0342f" />
-            <circle cx="28" cy="34" r="19" fill="#ffffff" />
-            <circle cx="28" cy="34" r="14" fill="#e0342f" />
-            <circle cx="28" cy="34" r="9" fill="#ffffff" />
-            <circle cx="28" cy="34" r="4.500" fill="#e0342f" />
-            <path d="M29 33 47 15" stroke="#b3261e" strokeWidth="4.500" strokeLinecap="round" />
-            <path d="M44 18 52 10" stroke="#f59e0b" strokeWidth="4" strokeLinecap="round" />
-            <path d="M46 7l11 3-4 4 4 4-3 11-5-3-1-6-6-1-3-5z" fill="#f59e0b" />
-            <circle cx="28" cy="34" r="2" fill="#7f1d1d" />
-          </svg>
+          <img className="purpose-icon" src="/alvo.webp" alt="" width="192" height="192" />
           <div>
             <h3 id="purpose-title">Por que o Contas em Dia existe</h3>
             <p>

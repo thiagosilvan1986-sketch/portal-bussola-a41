@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'logo-login.webp', 'logo-horizontal.webp'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'logo-login.webp', 'logo-horizontal.webp', 'alvo.webp'],
       manifest: {
         name: 'Contas em Dia',
         short_name: 'Contas',
