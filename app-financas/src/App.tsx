@@ -7,6 +7,9 @@ import BillForm from './pages/BillForm'
 import Bills from './pages/Bills'
 import Home from './pages/Home'
 import Login from './pages/Login'
+import PersonPage from './pages/PersonPage'
+import ReceivableForm from './pages/ReceivableForm'
+import Receivables from './pages/Receivables'
 import SetupNeeded from './pages/SetupNeeded'
 import Settings from './pages/Settings'
 
@@ -22,6 +25,9 @@ function Gate() {
         <Route path="/contas" element={<Bills />} />
         <Route path="/contas/nova" element={<BillForm />} />
         <Route path="/contas/:id" element={<BillForm />} />
+        <Route path="/receber" element={<Receivables />} />
+        <Route path="/receber/nova" element={<ReceivableForm />} />
+        <Route path="/receber/pessoa/:id" element={<PersonPage />} />
         <Route path="/ajustes" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

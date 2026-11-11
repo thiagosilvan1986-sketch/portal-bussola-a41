@@ -46,3 +46,32 @@ export type DisplayStatus =
   | 'vence_em_breve'
   | 'cobranca_recebida'
   | 'prevista'
+
+/** Pessoa que nos deve. Telefone guardado só com dígitos. */
+export interface Person {
+  id: string
+  name: string
+  phone: string
+  email: string
+}
+
+/** Uma parcela a receber. Valores em centavos. */
+export interface Installment {
+  number: number
+  dueDate: IsoDate
+  amountCents: number
+  paidAt: IsoDate | null
+  paidAmountCents: number | null
+}
+
+/** Compra parcelada para alguém (o que a pessoa nos deve). */
+export interface Receivable {
+  id: string
+  personId: string
+  description: string
+  totalCents: number
+  installmentCount: number
+  firstDueDate: IsoDate
+  installments: Installment[]
+  notes: string
+}

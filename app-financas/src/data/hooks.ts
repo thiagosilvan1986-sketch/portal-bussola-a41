@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { todayInSaoPaulo } from '../domain/dates'
-import type { Bill, Competence, Entry, IsoDate } from '../domain/types'
-import { subscribeBills, subscribeEntries } from './store'
+import type { Bill, Competence, Entry, IsoDate, Person, Receivable } from '../domain/types'
+import { subscribeBills, subscribeEntries, subscribePeople, subscribeReceivables } from './store'
 
 interface Live<T> {
   data: T[]
@@ -16,6 +16,34 @@ export function useBills(uid: string): Live<Bill> {
   useEffect(
     () =>
       subscribeBills(
+        uid,
+        (data) => setState({ data, ready: true, error: null }),
+        (e) => setState((s) => ({ ...s, ready: true, error: e.message })),
+      ),
+    [uid],
+  )
+  return state
+}
+
+export function usePeople(uid: string): Live<Person> {
+  const [state, setState] = useState<Live<Person>>(INITIAL)
+  useEffect(
+    () =>
+      subscribePeople(
+        uid,
+        (data) => setState({ data, ready: true, error: null }),
+        (e) => setState((s) => ({ ...s, ready: true, error: e.message })),
+      ),
+    [uid],
+  )
+  return state
+}
+
+export function useReceivables(uid: string): Live<Receivable> {
+  const [state, setState] = useState<Live<Receivable>>(INITIAL)
+  useEffect(
+    () =>
+      subscribeReceivables(
         uid,
         (data) => setState({ data, ready: true, error: null }),
         (e) => setState((s) => ({ ...s, ready: true, error: e.message })),

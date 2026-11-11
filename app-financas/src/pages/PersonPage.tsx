@@ -1,0 +1,391 @@
+import { useMemo, useState, type FormEvent } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useAuth } from '../auth'
+import { ChargeSheet } from '../components/ChargeSheet'
+import { StatusChip } from '../components/StatusChip'
+import { usePeople, useReceivables, useToday } from '../data/hooks'
+import { deletePerson, deleteReceivable, setInstallmentPayment, updatePerson } from '../data/store'
+import { formatDateBR } from '../domain/dates'
+import { centsToInput, formatBRL, parseBRLToCents } from '../domain/money'
+import {
+  formatPhone,
+  installmentRemaining,
+  installmentStatus,
+  isSettled,
+  isValidEmail,
+  isValidPhone,
+  phoneDigits,
+  summarizePerson,
+  summarizeReceivable,
+} from '../domain/receivables'
+import type { Installment, IsoDate, Person, Receivable } from '../domain/types'
+
+const log = (e: unknown) => console.error('Falha ao gravar', e)
+
+export default function PersonPage() {
+  const { id } = useParams()
+  const uid = useAuth().user!.uid
+  const today = useToday()
+  const people = usePeople(uid)
+  const receivables = useReceivables(uid)
+
+  if (!people.ready || !receivables.ready) {
+    return (
+      <main className="page">
+        <p className="muted center-text">Carregando…</p>
+      </main>
+    )
+  }
+  const person = people.data.find((p) => p.id === id)
+  if (!person) {
+    return (
+      <main className="page">
+        <p className="error">Pessoa não encontrada.</p>
+        <Link className="btn" to="/receber">
+          Voltar
+        </Link>
+      </main>
+    )
+  }
+  const mine = receivables.data.filter((r) => r.personId === person.id)
+  return <Detail key={person.id} uid={uid} today={today} person={person} receivables={mine} />
+}
+
+function Detail({ uid, today, person, receivables }: { uid: string; today: IsoDate; person: Person; receivables: Receivable[] }) {
+  const navigate = useNavigate()
+  const [editingContact, setEditingContact] = useState(false)
+  const [charging, setCharging] = useState<Receivable[] | null>(null)
+
+  const sorted = useMemo(
+    () =>
+      [...receivables].sort((a, b) => {
+        const sa = summarizeReceivable(a, today)
+        const sb = summarizeReceivable(b, today)
+        return (
+          Number(sb.remainingCents > 0) - Number(sa.remainingCents > 0) ||
+          (sa.nextDueDate ?? '9999').localeCompare(sb.nextDueDate ?? '9999')
+        )
+      }),
+    [receivables, today],
+  )
+  const summary = summarizePerson(receivables, today)
+  const canCharge = summary.remainingCents > 0
+
+  return (
+    <main className="page">
+      <header className="page-head">
+        <h1>{person.name}</h1>
+        <Link className="link-btn" to="/receber">
+          Voltar
+        </Link>
+      </header>
+
+      {summary.overdueCount > 0 && (
+        <p className="banner banner-danger" role="status">
+          {summary.overdueCount === 1 ? '1 parcela atrasada' : `${summary.overdueCount} parcelas atrasadas`}, somando{' '}
+          {formatBRL(summary.overdueCents)}.
+        </p>
+      )}
+
+      <section className="summary" aria-label="Resumo desta pessoa">
+        <div className="card summary-main">
+          <span className="muted">Falta receber</span>
+          <strong>{formatBRL(summary.remainingCents)}</strong>
+          <span className="muted">
+            {summary.purchaseCount === 0
+              ? 'Nenhuma compra cadastrada'
+              : summary.remainingCents === 0
+                ? 'Tudo recebido'
+                : summary.nextDueDate
+                  ? `Próxima parcela em ${formatDateBR(summary.nextDueDate)}`
+                  : ''}
+          </span>
+        </div>
+        <div className="card">
+          <span className="muted">Já recebido</span>
+          <strong>{formatBRL(summary.receivedCents)}</strong>
+        </div>
+        <div className="card">
+          <span className="muted">Em atraso</span>
+          <strong>{formatBRL(summary.overdueCents)}</strong>
+        </div>
+      </section>
+
+      <div className="actions">
+        <button className="btn primary" disabled={!canCharge} onClick={() => setCharging(receivables)}>
+          Cobrar {person.name.split(/\s+/)[0]}
+        </button>
+        <Link className="btn" to={`/receber/nova?pessoa=${person.id}`}>
+          Nova compra
+        </Link>
+      </div>
+
+      <Contact uid={uid} person={person} editing={editingContact} setEditing={setEditingContact} />
+
+      {sorted.length === 0 ? (
+        <div className="empty card">
+          <h2>Nenhuma compra desta pessoa</h2>
+          <p className="muted">Toque em “Nova compra” para cadastrar o que foi parcelado.</p>
+          <DeleteButton
+            label="Excluir pessoa"
+            onConfirm={() => {
+              deletePerson(uid, person.id).catch(log)
+              navigate('/receber')
+            }}
+          />
+        </div>
+      ) : (
+        sorted.map((r) => (
+          <Purchase key={r.id} uid={uid} today={today} receivable={r} onCharge={() => setCharging([r])} />
+        ))
+      )}
+
+      {charging && (
+        <ChargeSheet
+          person={person}
+          receivables={charging}
+          today={today}
+          onClose={() => setCharging(null)}
+          onEditContact={() => {
+            setCharging(null)
+            setEditingContact(true)
+          }}
+        />
+      )}
+    </main>
+  )
+}
+
+function Contact({
+  uid,
+  person,
+  editing,
+  setEditing,
+}: {
+  uid: string
+  person: Person
+  editing: boolean
+  setEditing: (v: boolean) => void
+}) {
+  const [name, setName] = useState(person.name)
+  const [phone, setPhone] = useState(person.phone ? formatPhone(person.phone) : '')
+  const [email, setEmail] = useState(person.email)
+  const [error, setError] = useState<string | null>(null)
+
+  function save(ev: FormEvent) {
+    ev.preventDefault()
+    if (!name.trim()) return setError('Informe o nome da pessoa.')
+    if (!isValidPhone(phone)) return setError('Telefone inválido. Use DDD e número, por exemplo (11) 91234-5678, ou deixe em branco.')
+    if (!isValidEmail(email)) return setError('E-mail inválido. Confira ou deixe em branco.')
+    updatePerson(uid, { id: person.id, name: name.trim(), phone: phoneDigits(phone), email: email.trim() }).catch(log)
+    setError(null)
+    setEditing(false)
+  }
+
+  if (!editing) {
+    return (
+      <section className="card stack" aria-label="Contato">
+        <div className="sheet-head">
+          <h2>Contato</h2>
+          <button className="link-btn" onClick={() => setEditing(true)}>
+            Editar contato
+          </button>
+        </div>
+        <dl className="facts">
+          <div>
+            <dt>Telefone / WhatsApp</dt>
+            <dd>{person.phone ? formatPhone(person.phone) : <span className="muted">não cadastrado</span>}</dd>
+          </div>
+          <div>
+            <dt>E-mail</dt>
+            <dd>{person.email || <span className="muted">não cadastrado</span>}</dd>
+          </div>
+        </dl>
+      </section>
+    )
+  }
+
+  return (
+    <form className="card stack" onSubmit={save} aria-label="Editar contato" noValidate>
+      <h2>Editar contato</h2>
+      <label>
+        Nome
+        <input value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label>
+        Telefone / WhatsApp
+        <input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(11) 91234-5678" />
+      </label>
+      <label>
+        E-mail
+        <input type="email" inputMode="email" autoCapitalize="none" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ana@exemplo.com" />
+      </label>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="actions">
+        <button className="btn primary" type="submit">
+          Salvar contato
+        </button>
+        <button className="btn" type="button" onClick={() => setEditing(false)}>
+          Cancelar
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function Purchase({ uid, today, receivable, onCharge }: { uid: string; today: IsoDate; receivable: Receivable; onCharge: () => void }) {
+  const s = summarizeReceivable(receivable, today)
+  const pct = s.count === 0 ? 0 : Math.round((s.settledCount / s.count) * 100)
+  return (
+    <section className="card stack" aria-label={receivable.description}>
+      <div className="sheet-head">
+        <div>
+          <h2>{receivable.description}</h2>
+          <p className="muted">
+            {s.settledCount} de {s.count} {s.count === 1 ? 'parcela recebida' : 'parcelas recebidas'}
+            {s.remainingCents > 0 ? ` · faltam ${formatBRL(s.remainingCents)}` : ' · quitada'}
+          </p>
+        </div>
+        <strong>{formatBRL(receivable.totalCents)}</strong>
+      </div>
+      <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Parcelas recebidas">
+        <div className="progress-fill" style={{ width: `${pct}%` }} />
+      </div>
+      {receivable.notes && <p className="muted">{receivable.notes}</p>}
+
+      <details open={s.remainingCents > 0 && s.count <= 12}>
+        <summary>Parcelas</summary>
+        <ul className="list parcels">
+          {receivable.installments.map((i) => (
+            <Parcel key={i.number} uid={uid} today={today} receivable={receivable} installment={i} />
+          ))}
+        </ul>
+      </details>
+
+      <div className="actions">
+        {s.remainingCents > 0 && (
+          <button className="btn small" onClick={onCharge}>
+            Cobrar esta compra
+          </button>
+        )}
+        <DeleteButton label="Excluir compra" onConfirm={() => deleteReceivable(uid, receivable.id).catch(log)} />
+      </div>
+    </section>
+  )
+}
+
+function Parcel({ uid, today, receivable, installment: i }: { uid: string; today: IsoDate; receivable: Receivable; installment: Installment }) {
+  const [editing, setEditing] = useState(false)
+  const [amount, setAmount] = useState(centsToInput(i.amountCents))
+  const [date, setDate] = useState(today)
+  const [error, setError] = useState<string | null>(null)
+
+  const status = installmentStatus(i, today)
+  const settled = isSettled(i)
+  const label = `Parcela ${i.number} de ${receivable.installmentCount}`
+
+  function quick() {
+    setInstallmentPayment(uid, receivable, i.number, { paidAt: today, paidAmountCents: i.amountCents }).catch(log)
+  }
+
+  function confirm(ev: FormEvent) {
+    ev.preventDefault()
+    const cents = parseBRLToCents(amount)
+    if (cents === null || cents <= 0) return setError('Informe o valor recebido. Exemplo: 42,00')
+    if (!date || date > today) return setError('A data do recebimento não pode ser futura.')
+    setInstallmentPayment(uid, receivable, i.number, { paidAt: date, paidAmountCents: cents }).catch(log)
+    setError(null)
+    setEditing(false)
+  }
+
+  return (
+    <li className={`row-card parcel status-${status}`}>
+      <div className="row-main">
+        <span className="row-title">{label}</span>
+        <span className="muted">
+          Vence {formatDateBR(i.dueDate)}
+          {i.paidAt ? ` · recebida em ${formatDateBR(i.paidAt)}` : ''}
+        </span>
+        <StatusChip status={status} />
+      </div>
+      <div className="row-side">
+        <strong>{formatBRL(settled ? (i.paidAmountCents ?? 0) : installmentRemaining(i))}</strong>
+        {i.paidAt !== null && !settled && <span className="muted">restante</span>}
+        <div className="parcel-actions">
+          {i.paidAt !== null && (
+            <button
+              className="link-btn"
+              aria-label={`Desfazer baixa da ${label.toLowerCase()} (${receivable.description})`}
+              onClick={() => setInstallmentPayment(uid, receivable, i.number, null).catch(log)}
+            >
+              Desfazer
+            </button>
+          )}
+          {!settled && (
+            <>
+              <button className="link-btn" onClick={() => setEditing((v) => !v)}>
+                Valor/data
+              </button>
+              <button className="check-btn" aria-label={`Dar baixa na ${label.toLowerCase()} (${receivable.description})`} onClick={quick}>
+                ✓
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+      {editing && (
+        <form className="parcel-form" onSubmit={confirm} aria-label={`Dar baixa na ${label.toLowerCase()}`} noValidate>
+          <div className="row">
+            <label>
+              Valor recebido
+              <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </label>
+            <label>
+              Data
+              <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} />
+            </label>
+          </div>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="actions">
+            <button className="btn primary small" type="submit">
+              Confirmar
+            </button>
+            <button className="btn small" type="button" onClick={() => setEditing(false)}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+    </li>
+  )
+}
+
+/** Exclusão em dois toques, sem janela de confirmação do navegador. */
+function DeleteButton({ label, onConfirm }: { label: string; onConfirm: () => void }) {
+  const [asking, setAsking] = useState(false)
+  if (!asking) {
+    return (
+      <button className="btn danger small" onClick={() => setAsking(true)}>
+        {label}
+      </button>
+    )
+  }
+  return (
+    <span className="actions">
+      <button className="btn danger small" onClick={onConfirm}>
+        Confirmar exclusão
+      </button>
+      <button className="btn small" onClick={() => setAsking(false)}>
+        Cancelar
+      </button>
+    </span>
+  )
+}
