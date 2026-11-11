@@ -13,7 +13,6 @@ export interface Bill {
   name: string
   category: string
   supplier: string
-  cnpj: string
   valueType: ValueType
   expectedAmountCents: number
   dueDay: number

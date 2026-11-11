@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { billAppliesTo, buildEntry, isValidCnpj, missingEntries } from './bills'
+import { billAppliesTo, buildEntry, missingEntries } from './bills'
 import { addMonths, daysInMonth, diffDays, dueDateFor, formatCompetence, formatDateBR, monthsBetween, todayInSaoPaulo } from './dates'
 import { displayStatus, isPending, remainingCents, sortEntries, summarize } from './entries'
 import { centsToInput, formatBRL, parseBRLToCents } from './money'
@@ -10,7 +10,6 @@ const bill = (over: Partial<Bill> = {}): Bill => ({
   name: 'Energia',
   category: 'Contas de consumo',
   supplier: 'Enel',
-  cnpj: '',
   valueType: 'variable',
   expectedAmountCents: 20000,
   dueDay: 15,
@@ -119,14 +118,6 @@ describe('contas recorrentes', () => {
 
     const partial = missingEntries(bills, new Set(['b1_2026-11']), ['2026-11'])
     expect(partial.map((e) => e.id)).toEqual(['b2_2026-11'])
-  })
-
-  it('valida CNPJ pelos dígitos verificadores', () => {
-    expect(isValidCnpj('11.222.333/0001-81')).toBe(true)
-    expect(isValidCnpj('11222333000181')).toBe(true)
-    expect(isValidCnpj('11.222.333/0001-82')).toBe(false)
-    expect(isValidCnpj('00000000000000')).toBe(false)
-    expect(isValidCnpj('123')).toBe(false)
   })
 })
 

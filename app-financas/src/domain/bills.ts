@@ -59,16 +59,3 @@ export function missingEntries(
   }
   return out
 }
-
-/** Valida CNPJ pelos dígitos verificadores. Aceita com ou sem máscara. */
-export function isValidCnpj(raw: string): boolean {
-  const d = raw.replace(/\D/g, '')
-  if (d.length !== 14 || /^(\d)\1+$/.test(d)) return false
-  const calc = (len: number) => {
-    const weights = len === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-    const sum = weights.reduce((acc, w, i) => acc + w * Number(d[i]), 0)
-    const r = sum % 11
-    return r < 2 ? 0 : 11 - r
-  }
-  return calc(12) === Number(d[12]) && calc(13) === Number(d[13])
-}

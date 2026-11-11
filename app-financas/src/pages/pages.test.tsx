@@ -12,7 +12,6 @@ const bill = (over: Partial<Bill> = {}): Bill => ({
   name: 'Energia',
   category: 'Contas de consumo',
   supplier: '',
-  cnpj: '',
   valueType: 'variable',
   expectedAmountCents: 20000,
   dueDay: 5,
@@ -182,17 +181,6 @@ describe('Cadastro de conta', () => {
     fill('Dia do vencimento', v.dia)
     submit()
     expect(screen.getByRole('alert').textContent).toContain(mensagem)
-    expect(store.saveBill).not.toHaveBeenCalled()
-  })
-
-  it('rejeita CNPJ com dígito verificador errado', () => {
-    renderForm()
-    fill('Nome', 'X')
-    fill(/Valor/, '10')
-    fill('Dia do vencimento', '5')
-    fill(/CNPJ/, '11.222.333/0001-82')
-    submit()
-    expect(screen.getByRole('alert').textContent).toContain('CNPJ inválido')
     expect(store.saveBill).not.toHaveBeenCalled()
   })
 

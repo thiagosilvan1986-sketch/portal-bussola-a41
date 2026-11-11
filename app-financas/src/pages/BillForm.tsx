@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useBills, useToday } from '../data/hooks'
 import { saveBill } from '../data/store'
-import { isValidCnpj, RECURRENCE_LABEL } from '../domain/bills'
+import { RECURRENCE_LABEL } from '../domain/bills'
 import { competenceOf } from '../domain/dates'
 import { CATEGORIES, PAYMENT_LABEL, QUICK_BILLS } from '../domain/labels'
 import { centsToInput, parseBRLToCents } from '../domain/money'
@@ -38,7 +38,6 @@ function Editor({ initial }: { initial: Bill | null }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [category, setCategory] = useState(initial?.category ?? 'Outros')
   const [supplier, setSupplier] = useState(initial?.supplier ?? '')
-  const [cnpj, setCnpj] = useState(initial?.cnpj ?? '')
   const [valueType, setValueType] = useState<ValueType>(initial?.valueType ?? 'fixed')
   const [amount, setAmount] = useState(initial ? centsToInput(initial.expectedAmountCents) : '')
   const [dueDay, setDueDay] = useState(String(initial?.dueDay ?? ''))
@@ -57,7 +56,6 @@ function Editor({ initial }: { initial: Bill | null }) {
     if (valueType === 'fixed' && cents === 0) return setError('Para valor fixo, informe um valor maior que zero.')
     if (!Number.isInteger(day) || day < 1 || day > 31) return setError('O dia de vencimento deve ser de 1 a 31.')
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(startMonth)) return setError('Informe o mês de início.')
-    if (cnpj.trim() && !isValidCnpj(cnpj)) return setError('CNPJ inválido. Confira os números ou deixe em branco.')
 
     setError(null)
     setSaving(true)
@@ -69,7 +67,6 @@ function Editor({ initial }: { initial: Bill | null }) {
           name: name.trim(),
           category,
           supplier: supplier.trim(),
-          cnpj: cnpj.replace(/\D/g, ''),
           valueType,
           expectedAmountCents: cents,
           dueDay: day,
@@ -187,10 +184,6 @@ function Editor({ initial }: { initial: Bill | null }) {
         <label>
           Fornecedor (opcional)
           <input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Ex.: Enel" />
-        </label>
-        <label>
-          CNPJ do fornecedor (opcional)
-          <input inputMode="numeric" value={cnpj} onChange={(e) => setCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
         </label>
         <label>
           Observações

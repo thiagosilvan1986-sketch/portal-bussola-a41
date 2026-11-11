@@ -34,7 +34,6 @@ const BILL_DEFAULTS: Data<Bill> = {
   name: '',
   category: 'Outros',
   supplier: '',
-  cnpj: '',
   valueType: 'fixed',
   expectedAmountCents: 0,
   dueDay: 1,
