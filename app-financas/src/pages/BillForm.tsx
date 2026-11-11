@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useBills, useReceivables, useRegistry, useToday } from '../data/hooks'
 import { CopyButton } from '../components/CopyButton'
+import { DaySelect } from '../components/DaySelect'
 import { DeleteButton } from '../components/DeleteButton'
 import { restoreMonth, deleteBill, saveBill } from '../data/store'
 import { settleWithin } from '../data/wait'
@@ -144,6 +145,7 @@ function Editor({ initial, seed = null, bills }: { initial: Bill | null; seed?: 
     if (!name.trim()) return setError('Informe o nome da conta.')
     if (cents === null) return setError('Informe um valor válido. Exemplo: 238,40')
     if (valueType === 'fixed' && cents === 0) return setError('Para valor fixo, informe um valor maior que zero.')
+    if (dueDay === '') return setError('Escolha o dia do vencimento.')
     if (!Number.isInteger(day) || day < 1 || day > 31) return setError('O dia de vencimento deve ser de 1 a 31.')
     if (!startValid) return setError('Informe o mês de início.')
     if (count !== '' && !countValid) return setError(`O número de parcelas deve ser de 1 a ${MAX_BILL_INSTALLMENTS}.`)
@@ -241,7 +243,7 @@ function Editor({ initial, seed = null, bills }: { initial: Bill | null; seed?: 
           </label>
           <label>
             Dia do vencimento
-            <input inputMode="numeric" value={dueDay} onChange={(e) => setDueDay(e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="Ex.: 15" required />
+            <DaySelect value={dueDay} onChange={setDueDay} emptyLabel="Escolha o dia" required />
           </label>
         </div>
 

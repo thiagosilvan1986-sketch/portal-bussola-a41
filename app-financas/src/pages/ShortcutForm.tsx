@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { CopyButton } from '../components/CopyButton'
+import { DaySelect } from '../components/DaySelect'
 import { DeleteButton } from '../components/DeleteButton'
 import { useBills, useRegistry } from '../data/hooks'
 import { saveRegistry } from '../data/store'
@@ -143,7 +144,7 @@ function Editor({
           </label>
           <label>
             Dia do vencimento (opcional)
-            <input inputMode="numeric" value={dueDay} onChange={(e) => setDueDay(e.target.value.replace(/\D/g, '').slice(0, 2))} placeholder="Ex.: 10" />
+            <DaySelect value={dueDay} onChange={setDueDay} emptyLabel="Sem dia fixo" />
           </label>
         </div>
 

@@ -101,7 +101,7 @@ describe('Apresentação na tela inicial', () => {
       'Pago em um toque',
       'Quem te deve, na ponta do lápis',
       'Cobrança sem climão',
-      'Relatórios para decidir',
+      'Dashboards interativos para tomada de decisões',
       'Sua planilha, sem retrabalho',
       'Privacidade num toque',
       'Você no controle',
@@ -279,6 +279,18 @@ describe('Cadastro de conta', () => {
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
   const submit = () => fireEvent.submit(screen.getByRole('button', { name: 'Salvar' }).closest('form')!)
 
+  it('o dia do vencimento é uma lista de 1 a 31, sem digitar', () => {
+    renderForm()
+    const select = screen.getByLabelText('Dia do vencimento') as HTMLSelectElement
+    expect(select.tagName).toBe('SELECT')
+    expect(select.required).toBe(true)
+    const options = Array.from(select.options)
+    expect(options[0].textContent).toBe('Escolha o dia')
+    expect(options.slice(1).map((o) => o.value)).toEqual(Array.from({ length: 31 }, (_, i) => String(i + 1)))
+    fill('Dia do vencimento', '31')
+    expect(select.value).toBe('31')
+  })
+
   it('salva em centavos e volta para a lista', async () => {
     renderForm()
     fill('Nome', 'Internet')
@@ -304,7 +316,7 @@ describe('Cadastro de conta', () => {
   it.each([
     ['sem nome', { Nome: '', valor: '10', dia: '5' }, 'Informe o nome da conta.'],
     ['valor inválido', { Nome: 'X', valor: 'abc', dia: '5' }, 'Informe um valor válido'],
-    ['dia fora do intervalo', { Nome: 'X', valor: '10', dia: '32' }, 'O dia de vencimento deve ser de 1 a 31.'],
+    ['dia não escolhido', { Nome: 'X', valor: '10', dia: '' }, 'Escolha o dia do vencimento.'],
   ])('rejeita %s', (_nome, v, mensagem) => {
     renderForm()
     fill('Nome', v.Nome)

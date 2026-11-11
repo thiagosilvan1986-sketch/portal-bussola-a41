@@ -2195,8 +2195,9 @@ button.cat-row.active {
   background: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 .purpose-icon {
-  font-size: 1.6rem;
-  line-height: 1;
+  flex: none;
+  width: 44px;
+  height: 44px;
 }
 .purpose h3 {
   margin: 0 0 4px;

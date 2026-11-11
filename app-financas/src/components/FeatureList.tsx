@@ -26,7 +26,7 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
   },
   {
     icon: 'M5 20V10m7 10V4m7 16v-7',
-    title: 'Relatórios para decidir',
+    title: 'Dashboards interativos para tomada de decisões',
     text: 'Trimestre, semestre ou ano, com gráficos que você explora com o dedo: mês a mês em barras ou acumulado, rosquinha por categoria, fluxo do dinheiro, mapa de vencimentos e comparação com o período anterior. Filtre por A pagar, A receber ou categoria.',
   },
   {

@@ -51,7 +51,7 @@ describe('Entrada', () => {
       'Pago em um toque',
       'Quem te deve, na ponta do lápis',
       'Cobrança sem climão',
-      'Relatórios para decidir',
+      'Dashboards interativos para tomada de decisões',
       'Sua planilha, sem retrabalho',
       'Privacidade num toque',
       'Você no controle',

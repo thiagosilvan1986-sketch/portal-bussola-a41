@@ -333,9 +333,12 @@ describe('Atalhos de conta', () => {
     // a máscara só aceita números: letras não entram no campo de valor
     fireEvent.change(screen.getByLabelText('Valor (opcional)'), { target: { value: 'abc' } })
     expect((screen.getByLabelText('Valor (opcional)') as HTMLInputElement).value).toBe('')
-    fireEvent.change(screen.getByLabelText('Dia do vencimento (opcional)'), { target: { value: '45' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar atalho' }))
-    expect(screen.getByRole('alert').textContent).toContain('1 a 31')
+    // o dia é uma lista de 1 a 31 (ou "Sem dia fixo"): não dá para digitar um dia inválido
+    const dia = screen.getByLabelText('Dia do vencimento (opcional)') as HTMLSelectElement
+    expect(dia.tagName).toBe('SELECT')
+    expect(Array.from(dia.options).map((o) => o.textContent)).toEqual(['Sem dia fixo', ...Array.from({ length: 31 }, (_, i) => String(i + 1))])
+    fireEvent.change(dia, { target: { value: '45' } })
+    expect(dia.value).toBe('')
     expect(store.saveRegistry).not.toHaveBeenCalled()
   })
 
@@ -444,6 +447,23 @@ describe('Sobre', () => {
     for (const f of FEATURES) expect(box.getByText(f.title)).toBeTruthy()
     expect(box.getByText('Do seu jeito')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Instalar no celular' })).toBeTruthy()
+  })
+
+  it('o item dos relatórios se chama "Dashboards interativos para tomada de decisões"', () => {
+    renderAt('/sobre')
+    expect(screen.getByText('Dashboards interativos para tomada de decisões')).toBeTruthy()
+    expect(screen.queryByText('Relatórios para decidir')).toBeNull()
+  })
+
+  it('o bloco "Por que o Contas em Dia existe" traz as cobranças a receber e um alvo no lugar do escudo', () => {
+    renderAt('/sobre')
+    const bloco = screen.getByRole('complementary')
+    expect(within(bloco).getByRole('heading', { name: 'Por que o Contas em Dia existe' })).toBeTruthy()
+    expect(bloco.textContent).toContain('fechar o mês sem susto e ajudar a realizar suas cobranças que tem a receber sem esquecimento.')
+    expect(bloco.textContent).not.toContain('🛡')
+    const icone = bloco.querySelector('svg.purpose-icon')
+    expect(icone).not.toBeNull()
+    expect(icone!.getAttribute('aria-hidden')).toBe('true')
   })
 })
 
