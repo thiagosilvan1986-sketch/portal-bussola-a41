@@ -3,9 +3,10 @@ import { useAuth } from '../auth'
 import { useBills } from '../data/hooks'
 import { RECURRENCE_LABEL } from '../domain/bills'
 import { PAYMENT_LABEL } from '../domain/labels'
-import { formatBRL } from '../domain/money'
+import { useMoney } from '../data/privacy'
 
 export default function Bills() {
+  const money = useMoney()
   const uid = useAuth().user!.uid
   const bills = useBills(uid)
   const sorted = [...bills.data].sort(
@@ -49,7 +50,7 @@ export default function Bills() {
                 {!b.active && <span className="chip chip-prevista">Arquivada</span>}
               </Link>
               <div className="row-side">
-                <strong>{formatBRL(b.expectedAmountCents)}</strong>
+                <strong>{money(b.expectedAmountCents)}</strong>
                 <span className="muted">{b.valueType === 'fixed' ? 'fixo' : 'estimado'}</span>
               </div>
             </li>

@@ -6,13 +6,14 @@ import { Welcome } from '../components/Welcome'
 import { StatusChip } from '../components/StatusChip'
 import { useBills, useEntries, useReceivables, useToday } from '../data/hooks'
 import { ensureEntries, payEntry } from '../data/store'
+import { useMoney } from '../data/privacy'
 import { dismissWelcome, isWelcomeDismissed } from '../data/welcome'
 import { addMonths, competenceOf, formatCompetence, formatDateBR } from '../domain/dates'
 import { amountDue, displayStatus, isPending, remainingCents, sortEntries, summarize } from '../domain/entries'
-import { formatBRL } from '../domain/money'
 import { KIND_INFO, RECEIVABLE_KINDS, listPath, ofKind, summarizePerson } from '../domain/receivables'
 
 export default function Home() {
+  const money = useMoney()
   const uid = useAuth().user!.uid
   const today = useToday()
   const thisMonth = competenceOf(today)
@@ -47,6 +48,16 @@ export default function Home() {
   const dueToday = sorted.filter((e) => e.dueDate === today && isPending(e))
 
   const hasBills = bills.data.some((b) => b.active)
+
+  // Semáforo do mês: vermelho se há conta atrasada, âmbar se só há contas por pagar, verde se tudo está pago.
+  const mainTone =
+    summary.overdueCount > 0
+      ? { tone: 'danger', icon: '⚠' }
+      : summary.pendingCount > 0
+        ? { tone: 'warn', icon: '●' }
+        : entries.data.length === 0
+          ? { tone: 'neutral', icon: '○' }
+          : { tone: 'ok', icon: '✓' }
 
   return (
     <main className="page">
@@ -91,7 +102,7 @@ export default function Home() {
         <Link key={k.kind} className="banner banner-danger banner-link" to={listPath(k.kind)}>
           <span>
             A receber em atraso · {KIND_INFO[k.kind].title}: {k.overdueCount === 1 ? '1 parcela' : `${k.overdueCount} parcelas`},{' '}
-            {formatBRL(k.overdueCents)}
+            {money(k.overdueCents)}
           </span>
           <span aria-hidden="true">›</span>
         </Link>
@@ -103,10 +114,11 @@ export default function Home() {
       )}
 
       <section className="summary" aria-label="Resumo do mês">
-        <div className="card summary-main">
+        <div className={`card summary-main tone-${mainTone.tone}`}>
           <span className="muted">Falta pagar</span>
-          <strong>{formatBRL(summary.remainingCents)}</strong>
+          <strong>{money(summary.remainingCents)}</strong>
           <span className="muted">
+            <span aria-hidden="true">{mainTone.icon} </span>
             {summary.pendingCount === 0
               ? entries.data.length === 0
                 ? 'Nenhuma conta neste mês'
@@ -116,13 +128,13 @@ export default function Home() {
                 : `${summary.pendingCount} contas pendentes`}
           </span>
         </div>
-        <div className="card">
+        <div className="card tone-ok">
           <span className="muted">Já pago</span>
-          <strong>{formatBRL(summary.paidCents)}</strong>
+          <strong>{money(summary.paidCents)}</strong>
         </div>
-        <div className="card">
+        <div className="card tone-pay">
           <span className="muted">Total do mês</span>
-          <strong>{formatBRL(summary.totalCents)}</strong>
+          <strong>{money(summary.totalCents)}</strong>
         </div>
       </section>
 
@@ -157,7 +169,7 @@ export default function Home() {
                   {toInform ? (
                     <span className="muted">Valor a informar</span>
                   ) : (
-                    <strong>{formatBRL(pending ? remainingCents(e) : amountDue(e))}</strong>
+                    <strong>{money(pending ? remainingCents(e) : amountDue(e))}</strong>
                   )}
                   {pending && !toInform && (
                     <button
@@ -175,7 +187,14 @@ export default function Home() {
         </ul>
       )}
 
-      {selected && <EntrySheet key={selected.id} uid={uid} entry={selected} today={today} onClose={() => setSelectedId(null)} />}
+      {selected && <EntrySheet
+          key={selected.id}
+          uid={uid}
+          entry={selected}
+          today={today}
+          billExists={bills.data.some((b) => b.id === selected.billId)}
+          onClose={() => setSelectedId(null)}
+        />}
     </main>
   )
 }

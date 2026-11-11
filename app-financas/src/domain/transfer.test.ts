@@ -111,6 +111,7 @@ const luz: Bill = {
   paymentMethod: 'boleto',
   notes: 'Conferir "bandeira"',
   active: true,
+  skippedMonths: [],
 }
 const seguro: Bill = {
   id: 'b2',
@@ -125,6 +126,7 @@ const seguro: Bill = {
   paymentMethod: 'debito_automatico',
   notes: '',
   active: false,
+  skippedMonths: [],
 }
 
 const withoutId = ({ id: _id, ...rest }: Bill) => rest
@@ -171,6 +173,7 @@ describe('contas a pagar (CSV)', () => {
         paymentMethod: 'debito_automatico',
         notes: '',
         active: true,
+        skippedMonths: [],
       },
     ])
   })

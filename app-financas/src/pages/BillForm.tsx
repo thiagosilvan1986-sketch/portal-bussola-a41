@@ -2,9 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useBills, useToday } from '../data/hooks'
-import { saveBill } from '../data/store'
+import { DeleteButton } from '../components/DeleteButton'
+import { restoreMonth, deleteBill, saveBill } from '../data/store'
+import { settleWithin } from '../data/wait'
 import { RECURRENCE_LABEL } from '../domain/bills'
-import { competenceOf } from '../domain/dates'
+import { competenceOf, formatCompetence } from '../domain/dates'
 import { CATEGORIES, PAYMENT_LABEL, QUICK_BILLS } from '../domain/labels'
 import { centsToInput, parseBRLToCents } from '../domain/money'
 import type { Bill, PaymentMethod, Recurrence, ValueType } from '../domain/types'
@@ -47,6 +49,7 @@ function Editor({ initial }: { initial: Bill | null }) {
   const [notes, setNotes] = useState(initial?.notes ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const skipped = [...(initial?.skippedMonths ?? [])].sort().reverse()
 
   async function persist(active: boolean) {
     const cents = parseBRLToCents(amount)
@@ -84,6 +87,25 @@ function Editor({ initial }: { initial: Bill | null }) {
       setError('Não foi possível salvar. Tente de novo.')
       setSaving(false)
     }
+  }
+
+  async function remove() {
+    if (!initial) return
+    setError(null)
+    setSaving(true)
+    try {
+      await settleWithin(deleteBill(uid, initial.id))
+      navigate('/contas')
+    } catch (e) {
+      console.error(e)
+      setError('Não foi possível excluir. Tente de novo.')
+      setSaving(false)
+    }
+  }
+
+  function restore(competence: string) {
+    if (!initial) return
+    restoreMonth(uid, initial.id, competence).catch((e) => console.error('Falha ao restaurar o mês', e))
   }
 
   function onSubmit(ev: FormEvent) {
@@ -201,11 +223,41 @@ function Editor({ initial }: { initial: Bill | null }) {
         </button>
 
         {initial && (
-          <button type="button" className={initial.active ? 'btn danger' : 'btn'} disabled={saving} onClick={() => void persist(!initial.active)}>
+          <button type="button" className="btn" disabled={saving} onClick={() => void persist(!initial.active)}>
             {initial.active ? 'Arquivar conta (para de gerar lançamentos)' : 'Reativar conta'}
           </button>
         )}
       </form>
+
+      {initial && skipped.length > 0 && (
+        <section className="card stack" aria-label="Meses excluídos">
+          <h2>Meses excluídos</h2>
+          <p className="muted">O app não cria o lançamento destes meses. Restaure para ele voltar.</p>
+          <ul className="list">
+            {skipped.map((c) => (
+              <li key={c} className="skipped-month">
+                <span>{formatCompetence(c)}</span>
+                <button type="button" className="btn small" onClick={() => restore(c)}>
+                  Restaurar
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {initial && (
+        <section className="card stack danger-zone" aria-label="Excluir conta">
+          <h2>Excluir conta</h2>
+          <p className="muted">Apaga a conta e todos os lançamentos dela, inclusive os já pagos. Para só parar de gerar, arquive.</p>
+          <DeleteButton
+            large
+            label="Excluir conta"
+            warning="Isso apaga a conta e todo o histórico de pagamentos dela. Não dá para desfazer."
+            onConfirm={() => void remove()}
+          />
+        </section>
+      )}
     </main>
   )
 }

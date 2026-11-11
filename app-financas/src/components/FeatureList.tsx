@@ -20,9 +20,24 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
     text: 'Mensagem pronta para WhatsApp ou e-mail, no tom certo para cada pessoa, com o histórico de cada cobrança.',
   },
   {
+    icon: 'M5 20V10m7 10V4m7 16v-7',
+    title: 'Relatórios para decidir',
+    text: 'Visão trimestral, semestral ou anual: o que você paga, o que recebe, o saldo e para onde o dinheiro vai, mês a mês.',
+  },
+  {
     icon: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM4 10h16M4 15h16M10 4v16',
     title: 'Sua planilha, sem retrabalho',
     text: 'Importe contas e compras de um CSV do Excel ou Google Planilhas, com prévia antes de gravar. E exporte tudo quando quiser.',
+  },
+  {
+    icon: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zm10-3a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
+    title: 'Privacidade num toque',
+    text: 'O olhinho no topo esconde todos os valores quando tem gente por perto. O app lembra a sua escolha.',
+  },
+  {
+    icon: 'M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4zM13.500 6.500l4 4',
+    title: 'Você no controle',
+    text: 'Inclua, edite ou exclua qualquer conta, lançamento, pessoa ou compra. Antes de apagar, o app pede confirmação.',
   },
   {
     icon: 'M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7zm4 10a2 2 0 0 0 4 0',

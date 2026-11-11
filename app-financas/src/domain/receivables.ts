@@ -280,6 +280,11 @@ export function addCharge(charges: ChargeLog[] | undefined, log: ChargeLog): Cha
   return [...(charges ?? []), log].slice(-MAX_CHARGE_LOG)
 }
 
+/** Tira uma cobrança do histórico (posição na lista original). */
+export function removeCharge(charges: ChargeLog[] | undefined, index: number): ChargeLog[] {
+  return (charges ?? []).filter((_, i) => i !== index)
+}
+
 export function lastCharge(charges: ChargeLog[] | undefined): ChargeLog | null {
   let best: ChargeLog | null = null
   for (const c of charges ?? []) if (best === null || c.date >= best.date) best = c

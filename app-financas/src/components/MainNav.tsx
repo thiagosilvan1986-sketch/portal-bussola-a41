@@ -4,6 +4,7 @@ const icons = {
   home: 'M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
   bills: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm3 4h8M8 12h8M8 16h5',
   receive: 'M12 4v11m0 0-4-4m4 4 4-4M5 20h14',
+  reports: 'M5 20V10m7 10V4m7 16v-7',
   settings: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4.500v5M9 14.500v5',
 }
 
@@ -31,6 +32,10 @@ export function MainNav() {
       <NavLink to="/receber" className={link}>
         <Icon path={icons.receive} />
         <span>A receber</span>
+      </NavLink>
+      <NavLink to="/relatorios" className={link}>
+        <Icon path={icons.reports} />
+        <span>Relatórios</span>
       </NavLink>
       <NavLink to="/ajustes" className={link}>
         <Icon path={icons.settings} />

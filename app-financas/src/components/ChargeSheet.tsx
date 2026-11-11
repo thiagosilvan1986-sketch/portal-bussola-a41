@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { formatBRL } from '../domain/money'
+import { useMoney } from '../data/privacy'
 import { diffDays } from '../domain/dates'
 import { chargeMessage, daysAgoText, channelVia, lastCharge, mailtoUrl, whatsappUrl } from '../domain/receivables'
 import type { ChargeChannel, IsoDate, Person, Receivable } from '../domain/types'
@@ -20,6 +20,7 @@ interface Props {
  * O app não envia sozinho: quem toca em "enviar" é você, dentro do WhatsApp ou do e-mail.
  */
 export function ChargeSheet({ person, receivables, today, onClose, onEditContact, onCharged }: Props) {
+  const money = useMoney()
   const message = useMemo(() => chargeMessage(person, receivables, today), [person, receivables, today])
   const [text, setText] = useState(message?.text ?? '')
   const [copied, setCopied] = useState(false)
@@ -76,7 +77,7 @@ export function ChargeSheet({ person, receivables, today, onClose, onEditContact
             {message && (
               <p className="muted">
                 {message.kind === 'overdue' ? 'Em atraso: ' : 'Próxima parcela: '}
-                <strong>{formatBRL(message.totalCents)}</strong>
+                <strong>{money(message.totalCents)}</strong>
               </p>
             )}
           </div>

@@ -1,15 +1,19 @@
 import { useState, type FormEvent } from 'react'
-import { payEntry, undoPayment, updateEntryDetails } from '../data/store'
-import { formatDateBR } from '../domain/dates'
+import { payEntry, skipEntry, undoPayment, updateEntryDetails } from '../data/store'
+import { formatCompetence, formatDateBR } from '../domain/dates'
 import { amountDue, displayStatus, isFullyPaid } from '../domain/entries'
-import { centsToInput, formatBRL, parseBRLToCents } from '../domain/money'
+import { useMoney } from '../data/privacy'
+import { centsToInput, parseBRLToCents } from '../domain/money'
 import type { Entry, IsoDate } from '../domain/types'
+import { DeleteButton } from './DeleteButton'
 import { StatusChip } from './StatusChip'
 
 interface Props {
   uid: string
   entry: Entry
   today: IsoDate
+  /** A conta ainda existe? Se não, o lançamento é só um resto e basta apagá-lo. */
+  billExists?: boolean
   onClose: () => void
 }
 
@@ -17,7 +21,8 @@ interface Props {
  * Folha de detalhe do lançamento. As gravações não esperam a confirmação do servidor:
  * o Firestore guarda localmente e sincroniza quando houver internet.
  */
-export function EntrySheet({ uid, entry, today, onClose }: Props) {
+export function EntrySheet({ uid, entry, today, billExists = true, onClose }: Props) {
+  const money = useMoney()
   const [charged, setCharged] = useState(entry.chargedAmountCents === null ? '' : centsToInput(entry.chargedAmountCents))
   const [barcode, setBarcode] = useState(entry.barcode)
   const [note, setNote] = useState(entry.note)
@@ -79,16 +84,16 @@ export function EntrySheet({ uid, entry, today, onClose }: Props) {
         <dl className="facts">
           <div>
             <dt>Previsto</dt>
-            <dd>{formatBRL(entry.expectedAmountCents)}</dd>
+            <dd>{money(entry.expectedAmountCents)}</dd>
           </div>
           <div>
             <dt>A pagar</dt>
-            <dd>{formatBRL(amountDue(entry))}</dd>
+            <dd>{money(amountDue(entry))}</dd>
           </div>
           {paid && (
             <div>
               <dt>Pago em {formatDateBR(entry.paidAt!)}</dt>
-              <dd>{formatBRL(entry.paidAmountCents ?? 0)}</dd>
+              <dd>{money(entry.paidAmountCents ?? 0)}</dd>
             </div>
           )}
         </dl>
@@ -144,6 +149,19 @@ export function EntrySheet({ uid, entry, today, onClose }: Props) {
             </button>
           )}
         </form>
+
+        <section className="stack danger-zone" aria-label="Excluir lançamento">
+          <h3>Excluir lançamento</h3>
+          <p className="muted">
+            Remove só {formatCompetence(entry.competence)}. A conta e os outros meses continuam
+            {paid ? '; o pagamento deste mês também será apagado' : ''}.
+          </p>
+          <DeleteButton
+            large
+            label={`Excluir ${formatCompetence(entry.competence)}`}
+            onConfirm={() => commit(skipEntry(uid, entry, billExists))}
+          />
+        </section>
 
         <button className="btn ghost" onClick={onClose}>
           Fechar

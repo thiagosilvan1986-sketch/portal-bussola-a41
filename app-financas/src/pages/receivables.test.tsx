@@ -44,6 +44,7 @@ const store = vi.hoisted(() => ({
   logCharge: vi.fn(),
   deleteReceivable: vi.fn(),
   deletePerson: vi.fn(),
+  deleteChargeLog: vi.fn(),
 }))
 
 vi.mock('../auth', () => ({ useAuth: () => ({ user: { uid: 'u1', email: 'a@b.c' }, signOut: vi.fn() }) }))
@@ -76,7 +77,7 @@ beforeEach(() => {
   hooks.useToday.mockReturnValue(TODAY)
   setData([ana, bruno], [tenis()])
   store.createReceivable.mockReturnValue({ personId: 'pNovo', receivableId: 'r9', done: Promise.resolve() })
-  for (const fn of [store.logCharge, store.updateReceivable, store.setInstallmentPayment, store.updatePerson, store.deleteReceivable, store.deletePerson]) {
+  for (const fn of [store.logCharge, store.updateReceivable, store.setInstallmentPayment, store.updatePerson, store.deleteReceivable, store.deletePerson, store.deleteChargeLog]) {
     fn.mockResolvedValue(undefined)
   }
 })
@@ -502,6 +503,33 @@ describe('página da pessoa', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Excluir pessoa' }))
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar exclusão' }))
     expect(store.deletePerson).toHaveBeenCalledWith('u1', 'p2')
+  })
+
+  it('excluir a pessoa leva junto todas as compras dela, só depois de confirmar', () => {
+    setData([ana], [tenis(), instalacao()])
+    renderAt('/receber/pessoa/p1')
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir Ana e as compras' }))
+    expect(store.deletePerson).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert').textContent).toContain('histórico de cobranças')
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar exclusão' }))
+    expect(store.deletePerson).toHaveBeenCalledTimes(1)
+    const [uid, personId, receivableIds] = store.deletePerson.mock.calls[0]
+    expect(uid).toBe('u1')
+    expect(personId).toBe('p1')
+    expect([...receivableIds].sort()).toEqual(['r1', 'r2'])
+  })
+
+  it('exclui uma cobrança do histórico, pela posição original', () => {
+    const log = (date: string) => ({ date, channel: 'whatsapp' as const, totalCents: 4200, overdue: true })
+    const comHistorico = { ...ana, charges: [log('2026-10-01'), log('2026-10-20'), log('2026-11-02')] }
+    setData([comHistorico], [tenis()])
+    renderAt('/receber/pessoa/p1')
+    const historico = screen.getByText('Histórico de cobranças').closest('details')!
+    const botoes = within(historico).getAllByRole('button', { name: 'Excluir' })
+    expect(botoes).toHaveLength(3)
+    fireEvent.click(botoes[1]) // a do meio: 20/10
+    fireEvent.click(within(historico).getByRole('button', { name: 'Confirmar exclusão' }))
+    expect(store.deleteChargeLog).toHaveBeenCalledWith('u1', comHistorico, 1)
   })
 
   it('avisa quando a pessoa não existe', () => {

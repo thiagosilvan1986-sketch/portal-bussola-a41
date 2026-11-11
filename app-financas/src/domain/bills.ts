@@ -22,6 +22,7 @@ export function entryId(billId: string, competence: Competence): string {
 /** A conta gera lançamento nesta competência? (ativa, já iniciada e dentro da periodicidade) */
 export function billAppliesTo(bill: Bill, competence: Competence): boolean {
   if (!bill.active) return false
+  if (bill.skippedMonths?.includes(competence)) return false
   const diff = monthsBetween(bill.startMonth, competence)
   return diff >= 0 && diff % RECURRENCE_STEP[bill.recurrence] === 0
 }

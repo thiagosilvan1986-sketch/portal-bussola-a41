@@ -96,7 +96,10 @@ describe('Apresentação na tela inicial', () => {
       'Pago em um toque',
       'Quem te deve, na ponta do lápis',
       'Cobrança sem climão',
+      'Relatórios para decidir',
       'Sua planilha, sem retrabalho',
+      'Privacidade num toque',
+      'Você no controle',
       'Tudo à vista, logo na entrada',
     ]) {
       expect(within(card).getByText(t)).toBeTruthy()

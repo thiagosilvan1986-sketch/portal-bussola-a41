@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { todayInSaoPaulo } from '../domain/dates'
 import type { Bill, Competence, Entry, IsoDate, Person, Receivable } from '../domain/types'
-import { subscribeBills, subscribeEntries, subscribePeople, subscribeReceivables } from './store'
+import { subscribeBills, subscribeEntries, subscribeEntriesRange, subscribePeople, subscribeReceivables } from './store'
 
 interface Live<T> {
   data: T[]
@@ -64,6 +64,22 @@ export function useEntries(uid: string, competence: Competence): Live<Entry> {
       (e) => setState((s) => ({ ...s, ready: true, error: e.message })),
     )
   }, [uid, competence])
+  return state
+}
+
+/** Lançamentos de um intervalo de competências, de `from` a `to` (inclusive). */
+export function useEntriesRange(uid: string, from: Competence, to: Competence): Live<Entry> {
+  const [state, setState] = useState<Live<Entry>>(INITIAL)
+  useEffect(() => {
+    setState(INITIAL)
+    return subscribeEntriesRange(
+      uid,
+      from,
+      to,
+      (data) => setState({ data, ready: true, error: null }),
+      (e) => setState((s) => ({ ...s, ready: true, error: e.message })),
+    )
+  }, [uid, from, to])
   return state
 }
 

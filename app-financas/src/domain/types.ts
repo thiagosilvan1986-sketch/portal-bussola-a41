@@ -21,6 +21,8 @@ export interface Bill {
   paymentMethod: PaymentMethod
   notes: string
   active: boolean
+  /** Meses cujo lançamento foi excluído: o app não os recria. Ausente em contas antigas. */
+  skippedMonths?: Competence[]
 }
 
 /** Lançamento do mês (a ocorrência). O id é `${billId}_${competence}`. */

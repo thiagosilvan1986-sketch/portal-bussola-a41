@@ -436,6 +436,7 @@ export function parseBillsCsv(text: string, existing: Bill[], today: IsoDate): B
       paymentMethod,
       notes,
       active,
+      skippedMonths: [],
     })
   })
 

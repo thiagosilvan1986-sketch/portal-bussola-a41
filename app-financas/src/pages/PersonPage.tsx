@@ -2,11 +2,13 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { ChargeSheet } from '../components/ChargeSheet'
+import { DeleteButton } from '../components/DeleteButton'
 import { StatusChip } from '../components/StatusChip'
 import { usePeople, useReceivables, useToday } from '../data/hooks'
-import { deletePerson, deleteReceivable, logCharge, setInstallmentPayment, updatePerson } from '../data/store'
+import { deleteChargeLog, deletePerson, deleteReceivable, logCharge, setInstallmentPayment, updatePerson } from '../data/store'
 import { formatDateBR } from '../domain/dates'
-import { centsToInput, formatBRL, parseBRLToCents } from '../domain/money'
+import { useMoney } from '../data/privacy'
+import { centsToInput, parseBRLToCents } from '../domain/money'
 import {
   CHANNEL_LABEL,
   KIND_INFO,
@@ -78,7 +80,7 @@ function Detail({ uid, today, person, receivables }: { uid: string; today: IsoDa
 
       <Contact uid={uid} person={person} editing={editingContact} setEditing={setEditingContact} />
 
-      <ChargeHistory person={person} today={today} />
+      <ChargeHistory uid={uid} person={person} today={today} />
 
       {kinds.length === 0 ? (
         <div className="empty card">
@@ -112,6 +114,29 @@ function Detail({ uid, today, person, receivables }: { uid: string; today: IsoDa
             onCharge={setCharging}
           />
         ))
+      )}
+
+      {kinds.length > 0 && (
+        <section className="card stack danger-zone" aria-label="Excluir pessoa">
+          <h2>Excluir pessoa</h2>
+          <p className="muted">
+            Apaga {person.name} e {receivables.length === 1 ? 'a compra' : `as ${receivables.length} compras`} dela, com todas as parcelas e o histórico de
+            cobranças.
+          </p>
+          <DeleteButton
+            large
+            label={`Excluir ${first} e ${receivables.length === 1 ? 'a compra' : 'as compras'}`}
+            warning="Isso apaga a pessoa, as compras, as parcelas e o histórico de cobranças. Não dá para desfazer."
+            onConfirm={() => {
+              deletePerson(
+                uid,
+                person.id,
+                receivables.map((r) => r.id),
+              ).catch(log)
+              navigate('/receber')
+            }}
+          />
+        </section>
       )}
 
       {charging && (
@@ -155,6 +180,7 @@ function KindSection({
   receivables: Receivable[]
   onCharge: (list: Receivable[]) => void
 }) {
+  const money = useMoney()
   const sorted = useMemo(
     () =>
       [...receivables].sort((a, b) => {
@@ -177,14 +203,14 @@ function KindSection({
       {summary.overdueCount > 0 && (
         <p className="banner banner-danger" role="status">
           {summary.overdueCount === 1 ? '1 parcela atrasada' : `${summary.overdueCount} parcelas atrasadas`}, somando{' '}
-          {formatBRL(summary.overdueCents)}.
+          {money(summary.overdueCents)}.
         </p>
       )}
 
       <div className="summary" role="group" aria-label={`Resumo: ${title}`}>
-        <div className="card summary-main">
+        <div className="card summary-main tone-recv">
           <span className="muted">Falta receber</span>
-          <strong>{formatBRL(summary.remainingCents)}</strong>
+          <strong>{money(summary.remainingCents)}</strong>
           <span className="muted">
             {summary.remainingCents === 0
               ? 'Tudo recebido'
@@ -193,13 +219,15 @@ function KindSection({
                 : ''}
           </span>
         </div>
-        <div className="card">
+        <div className="card tone-ok">
           <span className="muted">Já recebido</span>
-          <strong>{formatBRL(summary.receivedCents)}</strong>
+          <strong>{money(summary.receivedCents)}</strong>
         </div>
-        <div className="card">
-          <span className="muted">Em atraso</span>
-          <strong>{formatBRL(summary.overdueCents)}</strong>
+        <div className={`card ${summary.overdueCents > 0 ? 'tone-danger' : 'tone-neutral'}`}>
+          <span className="muted">
+            {summary.overdueCents > 0 && <span aria-hidden="true">⚠ </span>}Em atraso
+          </span>
+          <strong>{money(summary.overdueCents)}</strong>
         </div>
       </div>
 
@@ -227,10 +255,11 @@ function KindSection({
 }
 
 /** Última cobrança e histórico das cobranças feitas a esta pessoa. */
-function ChargeHistory({ person, today }: { person: Person; today: IsoDate }) {
+function ChargeHistory({ uid, person, today }: { uid: string; person: Person; today: IsoDate }) {
+  const money = useMoney()
   const last = lastChargeText(person.charges, today)
   if (!last) return null
-  const list = [...person.charges].reverse()
+  const list = person.charges.map((c, index) => ({ c, index })).reverse()
   return (
     <details className="card charge-history">
       <summary>
@@ -238,14 +267,15 @@ function ChargeHistory({ person, today }: { person: Person; today: IsoDate }) {
         <span className="muted">{last}</span>
       </summary>
       <ul className="list charge-list">
-        {list.map((c, idx) => (
-          <li key={`${c.date}-${idx}`}>
+        {list.map(({ c, index }) => (
+          <li key={`${c.date}-${index}`}>
             <span>
               {formatDateBR(c.date)} · {CHANNEL_LABEL[c.channel]}
             </span>
             <span className="muted">
-              {formatBRL(c.totalCents)} · {c.overdue ? 'em atraso' : 'lembrete'}
+              {money(c.totalCents)} · {c.overdue ? 'em atraso' : 'lembrete'}
             </span>
+            <DeleteButton label="Excluir" onConfirm={() => deleteChargeLog(uid, person, index).catch(log)} />
           </li>
         ))}
       </ul>
@@ -347,6 +377,7 @@ function Contact({
 }
 
 function Purchase({ uid, today, receivable, onCharge }: { uid: string; today: IsoDate; receivable: Receivable; onCharge: () => void }) {
+  const money = useMoney()
   const s = summarizeReceivable(receivable, today)
   const pct = s.count === 0 ? 0 : Math.round((s.settledCount / s.count) * 100)
   return (
@@ -356,10 +387,10 @@ function Purchase({ uid, today, receivable, onCharge }: { uid: string; today: Is
           <h2>{receivable.description}</h2>
           <p className="muted">
             {s.settledCount} de {s.count} {s.count === 1 ? 'parcela recebida' : 'parcelas recebidas'}
-            {s.remainingCents > 0 ? ` · faltam ${formatBRL(s.remainingCents)}` : ' · quitada'}
+            {s.remainingCents > 0 ? ` · faltam ${money(s.remainingCents)}` : ' · quitada'}
           </p>
         </div>
-        <strong>{formatBRL(receivable.totalCents)}</strong>
+        <strong>{money(receivable.totalCents)}</strong>
       </div>
       <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Parcelas recebidas">
         <div className="progress-fill" style={{ width: `${pct}%` }} />
@@ -391,6 +422,7 @@ function Purchase({ uid, today, receivable, onCharge }: { uid: string; today: Is
 }
 
 function Parcel({ uid, today, receivable, installment: i }: { uid: string; today: IsoDate; receivable: Receivable; installment: Installment }) {
+  const money = useMoney()
   const [editing, setEditing] = useState(false)
   const [amount, setAmount] = useState(centsToInput(i.amountCents))
   const [date, setDate] = useState(today)
@@ -425,7 +457,7 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
         <StatusChip status={status} />
       </div>
       <div className="row-side">
-        <strong>{formatBRL(settled ? (i.paidAmountCents ?? 0) : installmentRemaining(i))}</strong>
+        <strong>{money(settled ? (i.paidAmountCents ?? 0) : installmentRemaining(i))}</strong>
         {i.paidAt !== null && !settled && <span className="muted">restante</span>}
         <div className="parcel-actions">
           {i.paidAt !== null && (
@@ -477,27 +509,5 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
         </form>
       )}
     </li>
-  )
-}
-
-/** Exclusão em dois toques, sem janela de confirmação do navegador. */
-function DeleteButton({ label, onConfirm }: { label: string; onConfirm: () => void }) {
-  const [asking, setAsking] = useState(false)
-  if (!asking) {
-    return (
-      <button className="btn danger small" onClick={() => setAsking(true)}>
-        {label}
-      </button>
-    )
-  }
-  return (
-    <span className="actions">
-      <button className="btn danger small" onClick={onConfirm}>
-        Confirmar exclusão
-      </button>
-      <button className="btn small" onClick={() => setAsking(false)}>
-        Cancelar
-      </button>
-    </span>
   )
 }

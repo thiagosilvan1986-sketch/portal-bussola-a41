@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { usePeople, useReceivables, useToday } from '../data/hooks'
 import { formatCompetenceShort, formatDateBR } from '../domain/dates'
-import { formatBRL } from '../domain/money'
+import { useMoney } from '../data/privacy'
 import {
   KIND_INFO,
   RECEIVABLE_KINDS,
@@ -27,6 +27,7 @@ const emptyText: Record<ReceivableKind, { title: string; body: string }> = {
 }
 
 export default function Receivables() {
+  const money = useMoney()
   const uid = useAuth().user!.uid
   const today = useToday()
   const [params] = useSearchParams()
@@ -99,14 +100,14 @@ export default function Receivables() {
       {totals.overdueCount > 0 && (
         <p className="banner banner-danger" role="status">
           {totals.overdueCount === 1 ? '1 parcela atrasada' : `${totals.overdueCount} parcelas atrasadas`}, somando{' '}
-          {formatBRL(totals.overdueCents)}.
+          {money(totals.overdueCents)}.
         </p>
       )}
 
       <section className="summary" aria-label="Resumo do que falta receber">
-        <div className="card summary-main">
+        <div className="card summary-main tone-recv">
           <span className="muted">Falta receber</span>
-          <strong>{formatBRL(totals.remainingCents)}</strong>
+          <strong>{money(totals.remainingCents)}</strong>
           <span className="muted">
             {totals.purchaseCount === 0
               ? 'Nenhuma compra cadastrada'
@@ -117,13 +118,15 @@ export default function Receivables() {
                   : `Em ${totals.purchaseCount} compras parceladas`}
           </span>
         </div>
-        <div className="card">
-          <span className="muted">Em atraso</span>
-          <strong>{formatBRL(totals.overdueCents)}</strong>
+        <div className={`card ${totals.overdueCents > 0 ? 'tone-danger' : 'tone-neutral'}`}>
+          <span className="muted">
+            {totals.overdueCents > 0 && <span aria-hidden="true">⚠ </span>}Em atraso
+          </span>
+          <strong>{money(totals.overdueCents)}</strong>
         </div>
-        <div className="card">
+        <div className="card tone-ok">
           <span className="muted">Já recebido</span>
-          <strong>{formatBRL(totals.receivedCents)}</strong>
+          <strong>{money(totals.receivedCents)}</strong>
         </div>
       </section>
 
@@ -164,17 +167,22 @@ export default function Receivables() {
                   </span>
                   {overdue && (
                     <span className="chip chip-atrasada">
+                      <span aria-hidden="true">⚠ </span>
                       {summary.overdueCount === 1 ? '1 parcela atrasada' : `${summary.overdueCount} parcelas atrasadas`}
                     </span>
                   )}
-                  {done && <span className="chip chip-paga">Quitado</span>}
+                  {done && (
+                    <span className="chip chip-paga">
+                      <span aria-hidden="true">✓ </span>Quitado
+                    </span>
+                  )}
                   {summary.remainingCents > 0 && lastChargeText(person.charges, today) && (
                     <span className="muted small-note">{lastChargeText(person.charges, today)}</span>
                   )}
                 </Link>
                 {summary.purchaseCount > 0 && (
                   <div className="row-side">
-                    <strong>{formatBRL(summary.remainingCents)}</strong>
+                    <strong>{money(summary.remainingCents)}</strong>
                     <span className="muted">falta</span>
                   </div>
                 )}
@@ -200,6 +208,7 @@ const forecastText: Record<ReceivableKind, { title: string; intro: string }> = {
 
 /** Mês a mês: quanto vence, quanto já foi recebido e quanto falta, mais o que ficou atrasado e o que vem depois. */
 function ForecastCard({ kind, forecast }: { kind: ReceivableKind; forecast: ReturnType<typeof forecastByMonth> }) {
+  const money = useMoney()
   const shown = forecast.months.filter((m) => m.totalCents > 0)
   const biggest = Math.max(1, ...shown.map((m) => m.totalCents))
   const current = forecast.months[0]
@@ -209,7 +218,7 @@ function ForecastCard({ kind, forecast }: { kind: ReceivableKind; forecast: Retu
         <span>{forecastText[kind].title}</span>
         <span className="muted">
           {current.remainingCents > 0
-            ? `Este mês: ${formatBRL(current.remainingCents)} a receber`
+            ? `Este mês: ${money(current.remainingCents)} a receber`
             : current.totalCents > 0
               ? 'Este mês: tudo recebido'
               : 'Nada vence este mês'}
@@ -220,7 +229,7 @@ function ForecastCard({ kind, forecast }: { kind: ReceivableKind; forecast: Retu
         {forecast.earlierCents > 0 && (
           <li className="forecast-row wide late">
             <span>Atrasado de meses anteriores</span>
-            <strong>{formatBRL(forecast.earlierCents)}</strong>
+            <strong>{money(forecast.earlierCents)}</strong>
           </li>
         )}
         {shown.map((m) => (
@@ -229,18 +238,18 @@ function ForecastCard({ kind, forecast }: { kind: ReceivableKind; forecast: Retu
             <div
               className="progress"
               role="img"
-              aria-label={`${formatCompetenceShort(m.competence)}: ${formatBRL(m.receivedCents)} recebidos de ${formatBRL(m.totalCents)}`}
+              aria-label={`${formatCompetenceShort(m.competence)}: ${money(m.receivedCents)} recebidos de ${money(m.totalCents)}`}
               style={{ width: `${Math.max(8, Math.round((m.totalCents / biggest) * 100))}%` }}
             >
               <div className="progress-fill" style={{ width: `${Math.round((m.receivedCents / m.totalCents) * 100)}%` }} />
             </div>
-            <strong>{m.remainingCents > 0 ? formatBRL(m.remainingCents) : 'Recebido'}</strong>
+            <strong>{m.remainingCents > 0 ? money(m.remainingCents) : 'Recebido'}</strong>
           </li>
         ))}
         {forecast.laterCents > 0 && (
           <li className="forecast-row wide">
             <span>Depois de {formatCompetenceShort(forecast.months[forecast.months.length - 1].competence)}</span>
-            <strong>{formatBRL(forecast.laterCents)}</strong>
+            <strong>{money(forecast.laterCents)}</strong>
           </li>
         )}
       </ul>

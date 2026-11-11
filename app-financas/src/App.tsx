@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth'
+import { PrivacyProvider } from './data/privacy'
 import { AppHeader } from './components/AppHeader'
 import { isFirebaseConfigured } from './firebase'
 import BillForm from './pages/BillForm'
@@ -10,6 +11,7 @@ import Login from './pages/Login'
 import PersonPage from './pages/PersonPage'
 import ReceivableForm from './pages/ReceivableForm'
 import Receivables from './pages/Receivables'
+import Reports from './pages/Reports'
 import SetupNeeded from './pages/SetupNeeded'
 import Settings from './pages/Settings'
 
@@ -29,6 +31,7 @@ function Gate() {
         <Route path="/receber/nova" element={<ReceivableForm />} />
         <Route path="/receber/compra/:id/editar" element={<ReceivableForm />} />
         <Route path="/receber/pessoa/:id" element={<PersonPage />} />
+        <Route path="/relatorios" element={<Reports />} />
         <Route path="/ajustes" element={<Settings />} />
         <Route path="/ajustes/planilhas" element={<DataTransfer />} />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -42,7 +45,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Gate />
+        <PrivacyProvider>
+          <Gate />
+        </PrivacyProvider>
       </AuthProvider>
     </BrowserRouter>
   )

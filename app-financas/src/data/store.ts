@@ -1,4 +1,6 @@
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -14,7 +16,7 @@ import {
 } from 'firebase/firestore'
 import { billAppliesTo, buildEntry, missingEntries } from '../domain/bills'
 import { competenceOf } from '../domain/dates'
-import { addCharge, withPayment } from '../domain/receivables'
+import { addCharge, removeCharge, withPayment } from '../domain/receivables'
 import type { NewBill, ReceivableImportPlan } from '../domain/transfer'
 import type { Bill, ChargeLog, Competence, Entry, Installment, IsoDate, Person, Receivable } from '../domain/types'
 import { db } from '../firebase'
@@ -48,6 +50,7 @@ const BILL_DEFAULTS: Data<Bill> = {
   paymentMethod: 'boleto',
   notes: '',
   active: true,
+  skippedMonths: [],
 }
 
 const ENTRY_DEFAULTS: Data<Entry> = {
@@ -89,6 +92,21 @@ export function subscribeEntries(
   )
 }
 
+/** Lançamentos de vários meses seguidos (para os relatórios): um filtro só, sem índice composto. */
+export function subscribeEntriesRange(
+  uid: string,
+  from: Competence,
+  to: Competence,
+  onData: (entries: Entry[]) => void,
+  onError: (error: Error) => void,
+): Unsubscribe {
+  return onSnapshot(
+    query(entriesCol(uid), where('competence', '>=', from), where('competence', '<=', to)),
+    (snap) => onData(snap.docs.map((d) => ({ ...ENTRY_DEFAULTS, ...d.data(), id: d.id }) as Entry)),
+    onError,
+  )
+}
+
 /**
  * Cria os lançamentos que faltam. O id é determinístico (`contaId_AAAA-MM`),
  * então rodar duas vezes, ou em dois aparelhos, nunca duplica.
@@ -112,7 +130,7 @@ export async function saveBill(
 ): Promise<string> {
   const ref = input.id ? doc(billsCol(uid), input.id) : doc(billsCol(uid))
   const bill: Bill = { ...input, id: ref.id }
-  await setDoc(ref, withoutId(bill))
+  await setDoc(ref, withoutId(bill), { merge: true })
 
   const from = competenceOf(today)
   const snap = await getDocs(query(entriesCol(uid), where('billId', '==', bill.id)))
@@ -135,6 +153,30 @@ export async function saveBill(
   }
   if (changed) await batch.commit()
   return ref.id
+}
+
+/** Exclui a conta e todos os lançamentos dela (inclusive os já pagos). Para só parar de gerar, a conta pode ser arquivada. */
+export async function deleteBill(uid: string, billId: string): Promise<void> {
+  const snap = await getDocs(query(entriesCol(uid), where('billId', '==', billId)))
+  const operations = snap.docs.map((d) => (batch: WriteBatch) => batch.delete(d.ref))
+  operations.push((batch) => batch.delete(doc(billsCol(uid), billId)))
+  return commitInChunks(operations)
+}
+
+/**
+ * Exclui só o lançamento de um mês. A conta guarda o mês como excluído,
+ * senão o app criaria o lançamento de novo ao abrir o Início.
+ */
+export function skipEntry(uid: string, entry: Entry, billExists: boolean): Promise<void> {
+  const batch = writeBatch(database())
+  batch.delete(doc(entriesCol(uid), entry.id))
+  if (billExists) batch.update(doc(billsCol(uid), entry.billId), { skippedMonths: arrayUnion(entry.competence) })
+  return batch.commit()
+}
+
+/** Desfaz a exclusão de um mês: o lançamento volta quando o Início for aberto. */
+export function restoreMonth(uid: string, billId: string, competence: Competence) {
+  return updateDoc(doc(billsCol(uid), billId), { skippedMonths: arrayRemove(competence) })
 }
 
 export function payEntry(uid: string, entryId: string, amountCents: number, paidAt: IsoDate) {
@@ -217,6 +259,10 @@ export function updatePerson(uid: string, person: Person) {
 }
 
 /** Registra que a pessoa foi cobrada (WhatsApp, e-mail ou mensagem copiada). */
+export function deleteChargeLog(uid: string, person: Person, index: number) {
+  return updateDoc(doc(peopleCol(uid), person.id), { charges: removeCharge(person.charges, index) })
+}
+
 export function logCharge(uid: string, person: Person, log: ChargeLog) {
   return updateDoc(doc(peopleCol(uid), person.id), { charges: addCharge(person.charges, log) })
 }
@@ -241,8 +287,11 @@ export function deleteReceivable(uid: string, receivableId: string) {
   return deleteDoc(doc(receivablesCol(uid), receivableId))
 }
 
-export function deletePerson(uid: string, personId: string) {
-  return deleteDoc(doc(peopleCol(uid), personId))
+/** Exclui a pessoa e, se houver, todas as compras dela (com o histórico de cobranças). */
+export function deletePerson(uid: string, personId: string, receivableIds: string[] = []): Promise<void> {
+  const operations = receivableIds.map((id) => (batch: WriteBatch) => batch.delete(doc(receivablesCol(uid), id)))
+  operations.push((batch) => batch.delete(doc(peopleCol(uid), personId)))
+  return commitInChunks(operations)
 }
 
 /* ---------- Importação de planilhas ---------- */
