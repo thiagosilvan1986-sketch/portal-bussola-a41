@@ -2,6 +2,7 @@ import * as webpush from 'web-push'
 import type { PushPayload } from '../../src/domain/alerts'
 import { adminDb } from './admin'
 import type { Pusher, SendResult } from './alerts-run'
+import { siteUrl } from './site'
 import { firestoreVapidStore, loadVapid, type Vapid } from './vapid'
 
 export function generateVapid(): Vapid {
@@ -10,7 +11,7 @@ export function generateVapid(): Vapid {
 
 /** Endereço de contato que os serviços de notificação exigem junto da chave. */
 export function vapidSubject(): string {
-  return process.env.VAPID_SUBJECT || process.env.URL || 'https://appfinancas.netlify.app'
+  return process.env.VAPID_SUBJECT || siteUrl()
 }
 
 /** As chaves do servidor (criadas na primeira vez). */

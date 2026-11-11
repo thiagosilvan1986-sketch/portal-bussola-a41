@@ -15,13 +15,17 @@ export interface AlertSettings {
   days: number[]
   /** Hora cheia (0 a 23), no horário de Brasília, em que a notificação do dia sai. */
   hour: number
+  /** Avisa por notificação (celular e navegador, com o app fechado), nos aparelhos ativados. Desligado, eles ficam cadastrados e não recebem. */
+  push: boolean
+  /** Avisa por e-mail (para o e-mail do login, já confirmado), nos mesmos dias e horário. */
+  email: boolean
 }
 
 /** Antecedências que a pessoa pode marcar. */
 export const ALERT_DAY_OPTIONS: readonly number[] = [0, 1, 2, 3, 5, 7, 10, 15]
 export const MAX_ALERT_DAYS = 15
 
-export const DEFAULT_ALERTS: AlertSettings = { enabled: true, days: [1], hour: 8 }
+export const DEFAULT_ALERTS: AlertSettings = { enabled: true, days: [1], hour: 8, push: true, email: false }
 
 /** Lê o que veio do Firestore (ou nada) e devolve configurações sempre válidas. */
 export function normalizeAlerts(raw: unknown): AlertSettings {
@@ -34,6 +38,8 @@ export function normalizeAlerts(raw: unknown): AlertSettings {
     enabled: typeof r.enabled === 'boolean' ? r.enabled : DEFAULT_ALERTS.enabled,
     days: days.length > 0 ? days : [...DEFAULT_ALERTS.days],
     hour,
+    push: typeof r.push === 'boolean' ? r.push : DEFAULT_ALERTS.push,
+    email: r.email === true,
   }
 }
 
@@ -66,7 +72,9 @@ export const formatHour = (hour: number) => `${String(hour).padStart(2, '0')}h`
 
 /** Resumo de uma linha para o menu de Cadastros. */
 export function alertsSummary(settings: AlertSettings): string {
-  return settings.enabled ? `${daysSummary(settings.days)} · às ${formatHour(settings.hour)}` : 'Avisos desligados'
+  if (!settings.enabled) return 'Avisos desligados'
+  const how = settings.push ? (settings.email ? ' · notificação e e-mail' : '') : settings.email ? ' · só por e-mail' : ' · só dentro do app'
+  return `${daysSummary(settings.days)} · às ${formatHour(settings.hour)}${how}`
 }
 
 /** Uma conta que vence dentro de uma das antecedências escolhidas. */
@@ -129,16 +137,16 @@ export interface PushPayload {
   tag: string
 }
 
+/** Uma linha por prazo, só com nomes: "Amanhã: Energia, Água" e "Em 3 dias: Internet". Serve à notificação e ao e-mail. */
+export function alertLines(items: DueItem[]): string[] {
+  return grouped(items).map((g) => `${whenLabel(g.daysLeft)}: ${g.names.join(', ')}`)
+}
+
+export const alertTitle = (count: number) => (count === 1 ? 'Uma conta está perto de vencer' : `${count} contas estão perto de vencer`)
+
 export function alertPayload(items: DueItem[]): PushPayload | null {
   if (items.length === 0) return null
-  return {
-    title: items.length === 1 ? 'Uma conta está perto de vencer' : `${items.length} contas estão perto de vencer`,
-    body: grouped(items)
-      .map((g) => `${whenLabel(g.daysLeft)}: ${g.names.join(', ')}`)
-      .join(' · '),
-    url: '/',
-    tag: 'vencimentos',
-  }
+  return { title: alertTitle(items.length), body: alertLines(items).join(' · '), url: '/', tag: 'vencimentos' }
 }
 
 export const TEST_PAYLOAD: PushPayload = {

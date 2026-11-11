@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { DeleteButton } from '../components/DeleteButton'
 import { useAlertSettings, usePushDevices } from '../data/hooks'
+import { EmailError, checkEmailVerified, sendTestEmail, sendVerificationEmail } from '../data/email'
 import {
   PushError,
   currentEndpoint,
@@ -36,6 +37,10 @@ export default function AlertSettings() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [verified, setVerified] = useState(user!.emailVerified === true)
+  const [emailBusy, setEmailBusy] = useState(false)
+  const [emailMsg, setEmailMsg] = useState<{ kind: 'notice' | 'error'; text: string } | null>(null)
+  const loginEmail = user!.email ?? ''
 
   useEffect(() => {
     let alive = true
@@ -107,6 +112,48 @@ export default function AlertSettings() {
         : `Aviso enviado para ${sent === total ? (sent === 1 ? '1 aparelho' : `${sent} aparelhos`) : `${sent} de ${total} aparelhos`}. Pode levar alguns segundos para aparecer.`
     })
 
+  // O aviso por e-mail só sai com o servidor configurado e o e-mail do login confirmado.
+  const emailServer = server !== 'checking' && server.status === 'ready' && server.email
+  const emailReady = emailServer && verified && loginEmail !== ''
+
+  async function runEmail(action: () => Promise<string>) {
+    setEmailBusy(true)
+    setEmailMsg(null)
+    try {
+      setEmailMsg({ kind: 'notice', text: await action() })
+    } catch (e) {
+      console.error(e)
+      setEmailMsg({ kind: 'error', text: e instanceof EmailError ? e.message : 'Algo deu errado. Tente de novo.' })
+    } finally {
+      setEmailBusy(false)
+    }
+  }
+
+  const changeEmail = (checked: boolean) =>
+    runEmail(async () => {
+      await settleWithin(saveAlerts(uid, { ...settings, email: checked }))
+      return checked ? `Pronto! Os avisos também vão para ${loginEmail}.` : 'Aviso por e-mail desligado.'
+    })
+
+  const confirmEmail = () =>
+    runEmail(async () => {
+      await sendVerificationEmail(user!)
+      return `Enviamos um link para ${loginEmail}. Abra o e-mail e toque no link (veja também a caixa de spam). Depois volte aqui e toque em “Já confirmei”.`
+    })
+
+  const checkConfirmed = () =>
+    runEmail(async () => {
+      const ok = await checkEmailVerified(user!)
+      setVerified(ok)
+      return ok ? 'E-mail confirmado! Agora é só marcar “Avisar por e-mail”.' : 'Ainda não aparece como confirmado. Abra o link que enviamos e tente de novo.'
+    })
+
+  const testEmail = () =>
+    runEmail(async () => {
+      await sendTestEmail(await user!.getIdToken())
+      return `E-mail de teste enviado para ${loginEmail}. Pode levar alguns instantes; se não aparecer, olhe a caixa de spam.`
+    })
+
   const removeOther = (id: string) =>
     run(async () => {
       await settleWithin(deletePushDevice(uid, id))
@@ -122,7 +169,7 @@ export default function AlertSettings() {
         </Link>
       </header>
       <p className="muted">
-        Receba um aviso antes de uma conta vencer, no celular e no navegador. Aqui você escolhe com quantos dias de antecedência e a que horas.
+        Receba um aviso antes de uma conta vencer, por notificação no celular ou no navegador, por e-mail, ou pelos dois. Aqui você escolhe com quantos dias de antecedência, a que horas e como ser avisado.
       </p>
 
       {!alerts.ready ? (
@@ -172,8 +219,23 @@ export default function AlertSettings() {
             <p className="muted">As mudanças são salvas na hora. A faixa “Vence amanhã” no Início segue estas mesmas escolhas.</p>
           </section>
 
-          <section className="card stack settings-card" aria-label="Neste aparelho">
-            <h2>Neste aparelho</h2>
+          <section className="card stack settings-card" aria-label="Aviso por notificação">
+            <h2>Aviso por notificação</h2>
+            <label className="check check-strong">
+              <input
+                type="checkbox"
+                checked={settings.push}
+                disabled={!settings.enabled}
+                onChange={(e) => void change({ ...settings, push: e.target.checked })}
+              />
+              Avisar por notificação (celular ou navegador)
+            </label>
+            <p className="muted">
+              {settings.push
+                ? 'A notificação chega mesmo com o app fechado, em cada aparelho ativado abaixo.'
+                : 'Desligada: os aparelhos continuam cadastrados, mas não recebem o aviso. A faixa dentro do app continua.'}
+            </p>
+            <h3>Neste aparelho</h3>
             {support === 'install-first' ? (
               <p>
                 No iPhone, o aviso com o app fechado só funciona depois de instalar o app: abra o site no Safari, toque em Compartilhar e em
@@ -227,6 +289,59 @@ export default function AlertSettings() {
             {error && (
               <p className="error" role="alert">
                 {error}
+              </p>
+            )}
+          </section>
+
+          <section className="card stack settings-card" aria-label="Aviso por e-mail">
+            <h2>Aviso por e-mail</h2>
+            <label className="check check-strong">
+              <input
+                type="checkbox"
+                checked={settings.email}
+                disabled={!emailReady || !settings.enabled || emailBusy}
+                onChange={(e) => void changeEmail(e.target.checked)}
+              />
+              Avisar por e-mail
+            </label>
+            {server === 'checking' ? (
+              <p className="muted">Verificando o servidor de avisos…</p>
+            ) : !emailServer ? (
+              <p>
+                O envio por e-mail ainda não está habilitado neste site (falta configurar o serviço de e-mail). Enquanto isso, os outros avisos
+                continuam funcionando.
+              </p>
+            ) : loginEmail === '' ? (
+              <p>Sua conta não tem um e-mail para receber os avisos.</p>
+            ) : !verified ? (
+              <>
+                <p>
+                  Para receber por e-mail, confirme que <strong>{loginEmail}</strong> é seu: enviamos um link para a sua caixa de entrada.
+                </p>
+                <span className="actions actions-column">
+                  <button type="button" className="btn primary" disabled={emailBusy} onClick={() => void confirmEmail()}>
+                    Enviar e-mail de confirmação
+                  </button>
+                  <button type="button" className="btn" disabled={emailBusy} onClick={() => void checkConfirmed()}>
+                    Já confirmei
+                  </button>
+                </span>
+              </>
+            ) : (
+              <>
+                <p className="muted">
+                  Vai para {loginEmail}, nos mesmos dias e horário dos outros avisos. O e-mail traz só os nomes e os prazos, sem valores.
+                </p>
+                {settings.email && (
+                  <button type="button" className="btn" disabled={emailBusy} onClick={() => void testEmail()}>
+                    Enviar e-mail de teste
+                  </button>
+                )}
+              </>
+            )}
+            {emailMsg && (
+              <p className={emailMsg.kind === 'error' ? 'error' : 'notice'} role={emailMsg.kind === 'error' ? 'alert' : 'status'}>
+                {emailMsg.text}
               </p>
             )}
           </section>

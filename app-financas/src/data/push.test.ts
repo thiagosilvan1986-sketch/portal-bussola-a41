@@ -36,7 +36,12 @@ describe('pushSupport', () => {
 
 describe('fetchPushConfig', () => {
   it('servidor ligado devolve a chave pública', async () => {
-    expect(await fetchPushConfig(reply({ publicKey: 'BKey' }))).toEqual({ status: 'ready', publicKey: 'BKey' })
+    expect(await fetchPushConfig(reply({ publicKey: 'BKey' }))).toEqual({ status: 'ready', publicKey: 'BKey', email: false })
+  })
+
+  it('diz se o servidor também tem o e-mail configurado (só com true de verdade)', async () => {
+    expect(await fetchPushConfig(reply({ publicKey: 'BKey', email: true }))).toEqual({ status: 'ready', publicKey: 'BKey', email: true })
+    expect(await fetchPushConfig(reply({ publicKey: 'BKey', email: 'sim' }))).toMatchObject({ email: false })
   })
   it('servidor sem configuração (503) é indisponível', async () => {
     expect(await fetchPushConfig(reply({ error: 'not_configured' }, { status: 503 }))).toEqual({ status: 'unavailable' })

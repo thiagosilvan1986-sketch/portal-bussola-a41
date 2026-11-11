@@ -55,7 +55,7 @@ Valores monetários são guardados em **centavos (inteiro)**. Datas em `AAAA-MM-
 
 ## Avisos de vencimento (notificação no celular e no navegador)
 
-Em **Cadastros > Alertas de vencimento** a pessoa escolhe quantos dias antes avisar (no dia, 1, 2, 3, 5, 7, 10 ou 15; pode marcar vários), a que horas, e ativa cada aparelho. Dentro do app, a faixa “Vence amanhã” no Início segue as mesmas escolhas e não depende do servidor.
+Em **Cadastros > Alertas de vencimento** a pessoa escolhe quantos dias antes avisar (no dia, 1, 2, 3, 5, 7, 10 ou 15; pode marcar vários), a que horas, **como** ser avisada (caixinhas **Avisar por notificação**, ligada por padrão, e **Avisar por e-mail**, desligada; dá para usar só uma, as duas, ou nenhuma e ficar só com a faixa do app) e ativa cada aparelho. Dentro do app, a faixa “Vence amanhã” no Início segue as mesmas escolhas e não depende do servidor.
 
 Para a notificação chegar **com o app fechado**, o servidor precisa estar ligado. Ele roda no Netlify, sem o plano Blaze do Firebase:
 
@@ -66,11 +66,25 @@ Para a notificação chegar **com o app fechado**, o servidor precisa estar liga
 
 **Única configuração manual:** no Netlify (Project configuration > Environment variables), criar `FIREBASE_SERVICE_ACCOUNT` com o conteúdo do JSON da conta de serviço (Firebase > Configurações do projeto > Contas de serviço > Gerar nova chave privada), marcada como **secret** e nunca colada no repositório nem em conversas. Depois, um novo deploy. Sem essa variável, a tela de Alertas avisa que o servidor ainda não foi ligado e o resto do app segue normal.
 
+### Também por e-mail (opcional)
+
+Na mesma tela há a caixinha **Avisar por e-mail** (independente da notificação): mesmos prazos e horário, e-mail só com nomes e prazos (sem valores). Sai de **um endereço remetente do app** (nunca do e-mail de quem usa) para o **e-mail do login** de cada pessoa, lido pelo servidor no Firebase Authentication, nunca de um endereço digitado no app. Só vale para e-mail **confirmado**: quem entra com o Google já tem; quem criou conta com e-mail e senha confirma pelo botão “Enviar e-mail de confirmação” na própria tela.
+
+- O envio usa a API do **Brevo** (plano gratuito: 300 e-mails por dia). `send-alerts.mts` manda o e-mail na mesma passada horária da notificação; cada canal guarda o seu “já avisei hoje” (`lastSent` e `lastSentEmail` em `settings/alertState`), então a falha de um não repete nem cancela o outro. `send-test-email.mts` atende o botão “Enviar e-mail de teste” (no máximo um por minuto por pessoa).
+- **Configuração manual, só no painel do Netlify** (Environment variables; a chave marcada como **secret**, nunca no repositório nem em conversas):
+  - `BREVO_API_KEY`: chave de API criada no Brevo (SMTP e API > Chaves de API).
+  - `MAIL_FROM`: o endereço remetente, **já confirmado no Brevo** (Remetentes, domínios e IPs > Remetentes). Sem isso o Brevo recusa o envio.
+  - `MAIL_FROM_NAME` (opcional): nome que aparece como remetente. Padrão: Contas em Dia.
+  - `APP_URL` (opcional): endereço usado no botão do e-mail. Padrão: o do site no Netlify.
+- Sem `BREVO_API_KEY` e `MAIL_FROM`, a caixinha aparece travada, com a explicação, e o resto dos avisos segue normal.
+- **Sem domínio próprio**, o remetente pode ser um e-mail pessoal confirmado no Brevo, mas e-mails enviados “em nome” de um Gmail por um serviço de terceiros tendem a cair no spam. Com um domínio, basta autenticá-lo no Brevo e trocar `MAIL_FROM`; o app não muda.
+
 ## Limitações conhecidas
 
 - No iPhone, o login com Google por pop-up pode falhar quando o app está instalado na tela inicial. Entrando pelo Safari funciona.
 - Anexos (boleto em PDF, comprovante) ainda não existem: o Cloud Storage do Firebase também pede o plano Blaze. Por enquanto, guarde a linha digitável no campo de texto.
 - Avisos de vencimento com o app fechado: no iPhone exigem iOS 16.4 ou mais novo e o app instalado na Tela de Início. A faixa “Vence amanhã” dentro do app funciona em qualquer aparelho.
+- Aviso por e-mail: o plano gratuito do Brevo manda até 300 por dia (um por pessoa por dia, então cabe em centenas de pessoas). Sem domínio próprio, parte dos e-mails pode cair no spam.
 
 ## Publicação
 

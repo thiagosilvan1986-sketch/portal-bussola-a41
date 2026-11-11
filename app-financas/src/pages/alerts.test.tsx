@@ -8,6 +8,7 @@ import { defaultRegistry } from '../domain/registry'
 import type { Bill } from '../domain/types'
 import type { AlertSettings } from '../domain/alerts'
 import type { PushDevice } from '../data/store'
+import { EmailError } from '../data/email'
 
 const bill = (over: Partial<Bill> = {}): Bill => ({
   id: 'b1',
@@ -43,8 +44,12 @@ const push = vi.hoisted(() => ({
   sendTestPush: vi.fn(),
 }))
 const getIdToken = vi.hoisted(() => vi.fn())
+const mail = vi.hoisted(() => ({ sendVerificationEmail: vi.fn(), checkEmailVerified: vi.fn(), sendTestEmail: vi.fn() }))
+/** A pessoa logada. `emailVerified` muda de um teste para outro. */
+const account = vi.hoisted(() => ({ uid: 'u1', email: 'a@b.c' as string | null, emailVerified: true, getIdToken: undefined as unknown }))
 
-vi.mock('../auth', () => ({ useAuth: () => ({ user: { uid: 'u1', email: 'a@b.c', getIdToken }, signOut: vi.fn() }) }))
+vi.mock('../auth', () => ({ useAuth: () => ({ user: account, signOut: vi.fn() }) }))
+vi.mock('../data/email', async (importOriginal) => ({ ...(await importOriginal<typeof import('../data/email')>()), ...mail }))
 vi.mock('../data/hooks', () => hooks)
 vi.mock('../data/store', () => store)
 vi.mock('../data/push', async (importOriginal) => ({ ...(await importOriginal<typeof import('../data/push')>()), ...push }))
@@ -52,7 +57,7 @@ vi.mock('../data/push', async (importOriginal) => ({ ...(await importOriginal<ty
 import { AppRoutes } from '../App'
 import { DueSoonBanner } from '../components/DueSoonBanner'
 
-const DEFAULTS: AlertSettings = { enabled: true, days: [1], hour: 8 }
+const DEFAULTS: AlertSettings = { enabled: true, days: [1], hour: 8, push: true, email: false }
 const device = (id: string, label: string): PushDevice => ({
   id,
   label,
@@ -78,9 +83,12 @@ function renderAt(path: string) {
 }
 
 beforeEach(() => {
+  account.email = 'a@b.c'
+  account.emailVerified = true
+  account.getIdToken = getIdToken
   setup()
   push.pushSupport.mockReturnValue('ok')
-  push.fetchPushConfig.mockResolvedValue({ status: 'ready', publicKey: 'BKey' })
+  push.fetchPushConfig.mockResolvedValue({ status: 'ready', publicKey: 'BKey', email: true })
   push.notificationPermission.mockReturnValue('default')
   store.saveAlerts.mockResolvedValue(undefined)
   store.savePushDevice.mockResolvedValue(undefined)
@@ -95,15 +103,27 @@ afterEach(() => {
 
 describe('Cadastros: atalho para os alertas', () => {
   it('o menu mostra o resumo do que está escolhido e leva à tela', () => {
-    setup({ settings: { enabled: true, days: [1, 3], hour: 9 } })
+    setup({ settings: { enabled: true, days: [1, 3], hour: 9, push: true, email: false } })
     renderAt('/cadastros')
     const link = screen.getByRole('link', { name: /Alertas de vencimento/ })
     expect(within(link).getByText('1 e 3 dias antes · às 09h')).toBeTruthy()
     expect(link.getAttribute('href')).toBe('/cadastros/alertas')
   })
 
+  it('com o e-mail marcado, o menu avisa', () => {
+    setup({ settings: { ...DEFAULTS, email: true } })
+    renderAt('/cadastros')
+    expect(within(screen.getByRole('link', { name: /Alertas de vencimento/ })).getByText('1 dia antes · às 08h · notificação e e-mail')).toBeTruthy()
+  })
+
+  it('sem a notificação, o menu diz como o aviso chega', () => {
+    setup({ settings: { ...DEFAULTS, push: false, email: true } })
+    renderAt('/cadastros')
+    expect(within(screen.getByRole('link', { name: /Alertas de vencimento/ })).getByText('1 dia antes · às 08h · só por e-mail')).toBeTruthy()
+  })
+
   it('desligado, o menu diz isso', () => {
-    setup({ settings: { enabled: false, days: [1], hour: 8 } })
+    setup({ settings: { enabled: false, days: [1], hour: 8, push: true, email: false } })
     renderAt('/cadastros')
     expect(within(screen.getByRole('link', { name: /Alertas de vencimento/ })).getByText('Avisos desligados')).toBeTruthy()
   })
@@ -136,14 +156,14 @@ describe('Tela Alertas de vencimento: quando avisar', () => {
   it('marcar mais um prazo grava na hora', () => {
     renderAt('/cadastros/alertas')
     fireEvent.click(screen.getByRole('button', { name: '3 dias' }))
-    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { enabled: true, days: [1, 3], hour: 8 })
+    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { enabled: true, days: [1, 3], hour: 8, push: true, email: false })
   })
 
   it('desmarcar um prazo grava na hora', () => {
-    setup({ settings: { enabled: true, days: [0, 1], hour: 8 } })
+    setup({ settings: { enabled: true, days: [0, 1], hour: 8, push: true, email: false } })
     renderAt('/cadastros/alertas')
     fireEvent.click(screen.getByRole('button', { name: 'No dia' }))
-    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { enabled: true, days: [1], hour: 8 })
+    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { enabled: true, days: [1], hour: 8, push: true, email: false })
   })
 
   it('não deixa desmarcar o último prazo e explica', () => {
@@ -156,17 +176,17 @@ describe('Tela Alertas de vencimento: quando avisar', () => {
   it('troca o horário', () => {
     renderAt('/cadastros/alertas')
     fireEvent.change(screen.getByLabelText(/Horário do aviso/), { target: { value: '20' } })
-    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { enabled: true, days: [1], hour: 20 })
+    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { enabled: true, days: [1], hour: 20, push: true, email: false })
   })
 
   it('desligar a chave grava e trava os prazos e o horário', () => {
     renderAt('/cadastros/alertas')
     fireEvent.click(screen.getByRole('checkbox', { name: /Avisar antes de a conta vencer/ }))
-    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { enabled: false, days: [1], hour: 8 })
+    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { enabled: false, days: [1], hour: 8, push: true, email: false })
   })
 
   it('desligado, os prazos e o horário ficam desabilitados', () => {
-    setup({ settings: { enabled: false, days: [1], hour: 8 } })
+    setup({ settings: { enabled: false, days: [1], hour: 8, push: true, email: false } })
     renderAt('/cadastros/alertas')
     expect((screen.getByRole('button', { name: '3 dias' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByLabelText(/Horário do aviso/) as HTMLSelectElement).disabled).toBe(true)
@@ -178,6 +198,49 @@ describe('Tela Alertas de vencimento: quando avisar', () => {
     renderAt('/cadastros/alertas')
     fireEvent.click(screen.getByRole('button', { name: '3 dias' }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/Não foi possível salvar/))
+  })
+})
+
+describe('Tela Alertas de vencimento: aviso por notificação', () => {
+  const box = () => screen.getByRole('checkbox', { name: /Avisar por notificação/ }) as HTMLInputElement
+
+  it('vem ligada e mostra o que isso quer dizer', () => {
+    renderAt('/cadastros/alertas')
+    expect(box().checked).toBe(true)
+    expect(screen.getByText(/chega mesmo com o app fechado/)).toBeTruthy()
+  })
+
+  it('desligar grava na hora, mantendo as outras escolhas, e explica', () => {
+    setup({ settings: { enabled: true, days: [1, 3], hour: 9, push: true, email: true } })
+    const { rerender } = renderAt('/cadastros/alertas')
+    fireEvent.click(box())
+    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { enabled: true, days: [1, 3], hour: 9, push: false, email: true })
+    setup({ settings: { enabled: true, days: [1, 3], hour: 9, push: false, email: true } })
+    rerender(
+      <MemoryRouter initialEntries={['/cadastros/alertas']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText(/os aparelhos continuam cadastrados, mas não recebem o aviso/)).toBeTruthy()
+  })
+
+  it('ligar de novo grava push verdadeiro', () => {
+    setup({ settings: { ...DEFAULTS, push: false } })
+    renderAt('/cadastros/alertas')
+    fireEvent.click(box())
+    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { ...DEFAULTS, push: true })
+  })
+
+  it('com os avisos desligados, a caixinha fica desabilitada', () => {
+    setup({ settings: { ...DEFAULTS, enabled: false } })
+    renderAt('/cadastros/alertas')
+    expect(box().disabled).toBe(true)
+  })
+
+  it('desligada, os aparelhos continuam podendo ser ativados e testados', async () => {
+    setup({ settings: { ...DEFAULTS, push: false } })
+    renderAt('/cadastros/alertas')
+    expect(await screen.findByRole('button', { name: 'Ativar neste aparelho' })).toBeTruthy()
   })
 })
 
@@ -293,6 +356,148 @@ describe('Tela Alertas de vencimento: outros aparelhos', () => {
   })
 })
 
+describe('Tela Alertas de vencimento: aviso por e-mail', () => {
+  const box = () => screen.getByRole('checkbox', { name: 'Avisar por e-mail' }) as HTMLInputElement
+  const emailCard = () => within(screen.getByRole('region', { name: 'Aviso por e-mail' }))
+
+  it('começa desmarcado e pronto para marcar, com o endereço de destino à vista', async () => {
+    renderAt('/cadastros/alertas')
+    await waitFor(() => expect(box().disabled).toBe(false))
+    expect(box().checked).toBe(false)
+    expect(emailCard().getByText(/Vai para a@b\.c/)).toBeTruthy()
+    expect(emailCard().getByText(/só os nomes e os prazos, sem valores/)).toBeTruthy()
+  })
+
+  it('marcar grava na hora, mantendo o resto das escolhas', async () => {
+    setup({ settings: { enabled: true, days: [1, 3], hour: 9, push: true, email: false } })
+    renderAt('/cadastros/alertas')
+    await waitFor(() => expect(box().disabled).toBe(false))
+    fireEvent.click(box())
+    await screen.findByText(/Os avisos também vão para a@b\.c/)
+    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { enabled: true, days: [1, 3], hour: 9, push: true, email: true })
+  })
+
+  it('desmarcar grava e avisa', async () => {
+    setup({ settings: { ...DEFAULTS, email: true } })
+    renderAt('/cadastros/alertas')
+    await waitFor(() => expect(box().disabled).toBe(false))
+    fireEvent.click(box())
+    await screen.findByText('Aviso por e-mail desligado.')
+    expect(store.saveAlerts).toHaveBeenCalledWith('u1', { ...DEFAULTS, email: false })
+  })
+
+  it('falha ao gravar mostra o erro dentro do cartão do e-mail', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    store.saveAlerts.mockRejectedValue(new Error('sem permissão'))
+    renderAt('/cadastros/alertas')
+    await waitFor(() => expect(box().disabled).toBe(false))
+    fireEvent.click(box())
+    await waitFor(() => expect(emailCard().getByRole('alert').textContent).toMatch(/Algo deu errado/))
+  })
+
+  it('com os avisos desligados, a caixinha fica desabilitada', async () => {
+    setup({ settings: { ...DEFAULTS, enabled: false } })
+    renderAt('/cadastros/alertas')
+    await emailCard().findByText(/Vai para/)
+    expect(box().disabled).toBe(true)
+  })
+
+  it('servidor sem o serviço de e-mail: explica e trava a caixinha', async () => {
+    push.fetchPushConfig.mockResolvedValue({ status: 'ready', publicKey: 'BKey', email: false })
+    renderAt('/cadastros/alertas')
+    await emailCard().findByText(/ainda não está habilitado neste site/)
+    expect(box().disabled).toBe(true)
+  })
+
+  it('servidor fora do ar: explica e trava a caixinha', async () => {
+    push.fetchPushConfig.mockResolvedValue({ status: 'unavailable' })
+    renderAt('/cadastros/alertas')
+    await emailCard().findByText(/ainda não está habilitado neste site/)
+    expect(box().disabled).toBe(true)
+  })
+
+  it('conta sem e-mail: explica', async () => {
+    account.email = null
+    renderAt('/cadastros/alertas')
+    await emailCard().findByText(/não tem um e-mail/)
+    expect(box().disabled).toBe(true)
+  })
+
+  describe('e-mail ainda não confirmado', () => {
+    beforeEach(() => {
+      account.emailVerified = false
+    })
+
+    it('pede a confirmação e trava a caixinha', async () => {
+      renderAt('/cadastros/alertas')
+      await emailCard().findByRole('button', { name: 'Enviar e-mail de confirmação' })
+      expect(emailCard().getByText('a@b.c')).toBeTruthy()
+      expect(emailCard().getByRole('button', { name: 'Já confirmei' })).toBeTruthy()
+      expect(box().disabled).toBe(true)
+      expect(emailCard().queryByRole('button', { name: 'Enviar e-mail de teste' })).toBeNull()
+    })
+
+    it('enviar o link de confirmação', async () => {
+      mail.sendVerificationEmail.mockResolvedValue(undefined)
+      renderAt('/cadastros/alertas')
+      fireEvent.click(await emailCard().findByRole('button', { name: 'Enviar e-mail de confirmação' }))
+      await emailCard().findByText(/Enviamos um link para a@b\.c/)
+      expect(mail.sendVerificationEmail).toHaveBeenCalledWith(account)
+    })
+
+    it('erro ao enviar o link mostra a mensagem', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      mail.sendVerificationEmail.mockRejectedValue(new EmailError('Muitos pedidos seguidos. Aguarde alguns minutos e tente de novo.'))
+      renderAt('/cadastros/alertas')
+      fireEvent.click(await emailCard().findByRole('button', { name: 'Enviar e-mail de confirmação' }))
+      await waitFor(() => expect(emailCard().getByRole('alert').textContent).toMatch(/Muitos pedidos/))
+    })
+
+    it('"Já confirmei" sem ter confirmado: avisa que ainda não aparece', async () => {
+      mail.checkEmailVerified.mockResolvedValue(false)
+      renderAt('/cadastros/alertas')
+      fireEvent.click(await emailCard().findByRole('button', { name: 'Já confirmei' }))
+      await emailCard().findByText(/Ainda não aparece como confirmado/)
+      expect(box().disabled).toBe(true)
+    })
+
+    it('"Já confirmei" depois de confirmar: libera a caixinha', async () => {
+      mail.checkEmailVerified.mockResolvedValue(true)
+      renderAt('/cadastros/alertas')
+      fireEvent.click(await emailCard().findByRole('button', { name: 'Já confirmei' }))
+      await emailCard().findByText(/E-mail confirmado!/)
+      expect(box().disabled).toBe(false)
+      expect(emailCard().queryByRole('button', { name: 'Já confirmei' })).toBeNull()
+    })
+  })
+
+  describe('e-mail de teste', () => {
+    it('só aparece com o aviso por e-mail marcado', async () => {
+      renderAt('/cadastros/alertas')
+      await emailCard().findByText(/Vai para/)
+      expect(emailCard().queryByRole('button', { name: 'Enviar e-mail de teste' })).toBeNull()
+    })
+
+    it('envia com o token da pessoa e diz para onde foi', async () => {
+      setup({ settings: { ...DEFAULTS, email: true } })
+      mail.sendTestEmail.mockResolvedValue(undefined)
+      renderAt('/cadastros/alertas')
+      fireEvent.click(await emailCard().findByRole('button', { name: 'Enviar e-mail de teste' }))
+      await emailCard().findByText(/E-mail de teste enviado para a@b\.c/)
+      expect(mail.sendTestEmail).toHaveBeenCalledWith('tok-123')
+    })
+
+    it('mostra o motivo quando o servidor recusa', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      setup({ settings: { ...DEFAULTS, email: true } })
+      mail.sendTestEmail.mockRejectedValue(new EmailError('Aguarde 40 segundos para pedir outro e-mail de teste.'))
+      renderAt('/cadastros/alertas')
+      fireEvent.click(await emailCard().findByRole('button', { name: 'Enviar e-mail de teste' }))
+      await waitFor(() => expect(emailCard().getByRole('alert').textContent).toBe('Aguarde 40 segundos para pedir outro e-mail de teste.'))
+    })
+  })
+})
+
 describe('Faixa "Vence amanhã" no Início', () => {
   const TODAY = '2026-11-09'
   const mount = (bills: Bill[], entries = [] as ReturnType<typeof buildEntry>[]) => {
@@ -306,13 +511,13 @@ describe('Faixa "Vence amanhã" no Início', () => {
   })
 
   it('segue os prazos escolhidos: uma frase por prazo', () => {
-    setup({ settings: { enabled: true, days: [1, 3], hour: 8 } })
+    setup({ settings: { enabled: true, days: [1, 3], hour: 8, push: true, email: false } })
     mount([bill({ id: 'a', name: 'Energia', dueDay: 10 }), bill({ id: 'b', name: 'Internet', dueDay: 12 })])
     expect(screen.getAllByRole('status').map((p) => p.textContent)).toEqual(['Vence amanhã: Energia', 'Vence em 3 dias: Internet'])
   })
 
   it('quem vence hoje não entra aqui (já tem a faixa "Vence hoje")', () => {
-    setup({ settings: { enabled: true, days: [0], hour: 8 } })
+    setup({ settings: { enabled: true, days: [0], hour: 8, push: true, email: false } })
     mount([bill({ dueDay: 9 })])
     expect(screen.queryByRole('status')).toBeNull()
   })
@@ -324,7 +529,7 @@ describe('Faixa "Vence amanhã" no Início', () => {
   })
 
   it('avisos desligados: sem faixa', () => {
-    setup({ settings: { enabled: false, days: [1], hour: 8 } })
+    setup({ settings: { enabled: false, days: [1], hour: 8, push: true, email: false } })
     mount([bill()])
     expect(screen.queryByRole('status')).toBeNull()
   })
@@ -353,6 +558,8 @@ describe('Sobre', () => {
   it('lista o aviso antes de vencer', () => {
     const item = FEATURES.find((f) => f.title === 'Aviso antes de vencer')
     expect(item).toBeTruthy()
-    expect(item!.text).toMatch(/celular e no navegador/)
+    expect(item!.text).toMatch(/celular ou no navegador/)
+    expect(item!.text).toMatch(/e-mail/)
+    expect(FEATURES).toHaveLength(15)
   })
 })

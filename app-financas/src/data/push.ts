@@ -38,15 +38,18 @@ export function pushSupport(env: PushEnvironment = currentEnvironment()): PushSu
   return env.hasServiceWorker && env.hasPush && env.hasNotification ? 'ok' : 'unsupported'
 }
 
-export type ServerState = { status: 'ready'; publicKey: string } | { status: 'unavailable' }
+/** `email`: o servidor também tem o envio por e-mail configurado. */
+export type ServerState = { status: 'ready'; publicKey: string; email: boolean } | { status: 'unavailable' }
 
 /** Pergunta ao servidor se os avisos estão configurados e pega a chave pública. Qualquer problema vira "indisponível". */
 export async function fetchPushConfig(fetcher: typeof fetch = fetch): Promise<ServerState> {
   try {
     const res = await fetcher(`${FUNCTIONS}/push-config`, { headers: { accept: 'application/json' } })
     if (!res.ok) return { status: 'unavailable' }
-    const body = (await res.json()) as { publicKey?: unknown }
-    return typeof body.publicKey === 'string' && body.publicKey ? { status: 'ready', publicKey: body.publicKey } : { status: 'unavailable' }
+    const body = (await res.json()) as { publicKey?: unknown; email?: unknown }
+    return typeof body.publicKey === 'string' && body.publicKey
+      ? { status: 'ready', publicKey: body.publicKey, email: body.email === true }
+      : { status: 'unavailable' }
   } catch {
     return { status: 'unavailable' }
   }

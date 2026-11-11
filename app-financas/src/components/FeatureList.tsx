@@ -7,7 +7,7 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
   {
     icon: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm0-11v4l2.500 1.500M5 3 2 6m17-3 3 3',
     title: 'Aviso antes de vencer',
-    text: 'Escolha com quantos dias de antecedência quer ser avisado (na véspera, 3 dias antes…) e a que horas. A notificação chega no celular e no navegador, mesmo com o app fechado, depois de ativar o aparelho em Cadastros.',
+    text: 'Escolha com quantos dias de antecedência quer ser avisado (na véspera, 3 dias antes…) e a que horas. Receba por notificação no celular ou no navegador, mesmo com o app fechado, por e-mail, ou pelos dois: você liga e desliga cada um em Cadastros.',
   },
   {
     icon: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm-4-9 3 3 5-6',

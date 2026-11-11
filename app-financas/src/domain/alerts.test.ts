@@ -49,14 +49,28 @@ describe('addDays e hourInSaoPaulo', () => {
 
 describe('normalizeAlerts', () => {
   it('sem nada, vale o padrão: ligado, 1 dia antes, às 8h', () => {
-    expect(normalizeAlerts(undefined)).toEqual({ enabled: true, days: [1], hour: 8 })
+    expect(normalizeAlerts(undefined)).toEqual({ enabled: true, days: [1], hour: 8, push: true, email: false })
     expect(normalizeAlerts(null)).toEqual(DEFAULT_ALERTS)
   })
   it('mantém o que é válido, ordena e tira repetidos', () => {
-    expect(normalizeAlerts({ enabled: false, days: [3, 1, 3, 0], hour: 20 })).toEqual({ enabled: false, days: [0, 1, 3], hour: 20 })
+    expect(normalizeAlerts({ enabled: false, days: [3, 1, 3, 0], hour: 20 })).toEqual({ enabled: false, days: [0, 1, 3], hour: 20, push: true, email: false })
+  })
+  it('a notificação vem ligada por padrão e só desliga se estiver desligada de verdade', () => {
+    expect(normalizeAlerts({}).push).toBe(true)
+    expect(normalizeAlerts({ push: false }).push).toBe(false)
+    expect(normalizeAlerts({ push: true }).push).toBe(true)
+    expect(normalizeAlerts({ push: 'não' }).push).toBe(true)
+    expect(normalizeAlerts({ push: 0 }).push).toBe(true)
+  })
+  it('o aviso por e-mail só vale se estiver marcado de verdade; sem o campo, fica desligado', () => {
+    expect(normalizeAlerts({ email: true }).email).toBe(true)
+    expect(normalizeAlerts({ email: false }).email).toBe(false)
+    expect(normalizeAlerts({}).email).toBe(false)
+    expect(normalizeAlerts({ email: 'sim' }).email).toBe(false)
+    expect(normalizeAlerts({ email: 1 }).email).toBe(false)
   })
   it('ignora prazos fora da lista, hora inválida e lixo', () => {
-    expect(normalizeAlerts({ days: [4, 99, 'x', 1.5], hour: 25 })).toEqual({ enabled: true, days: [1], hour: 8 })
+    expect(normalizeAlerts({ days: [4, 99, 'x', 1.5], hour: 25 })).toEqual({ enabled: true, days: [1], hour: 8, push: true, email: false })
     expect(normalizeAlerts({ hour: 7.5 }).hour).toBe(8)
     expect(normalizeAlerts('texto')).toEqual(DEFAULT_ALERTS)
   })
@@ -67,7 +81,7 @@ describe('normalizeAlerts', () => {
 })
 
 describe('toggleAlertDay', () => {
-  const s = { enabled: true, days: [1], hour: 8 }
+  const s = { enabled: true, days: [1], hour: 8, push: true, email: false }
   it('marca mais um prazo e mantém a ordem', () => {
     expect(toggleAlertDay(s, 0)?.days).toEqual([0, 1])
     expect(toggleAlertDay({ ...s, days: [1, 7] }, 3)?.days).toEqual([1, 3, 7])
@@ -98,7 +112,11 @@ describe('textos', () => {
   })
   it('resumo do menu', () => {
     expect(alertsSummary(DEFAULT_ALERTS)).toBe('1 dia antes · às 08h')
-    expect(alertsSummary({ enabled: false, days: [1], hour: 8 })).toBe('Avisos desligados')
+    expect(alertsSummary({ enabled: false, days: [1], hour: 8, push: true, email: false })).toBe('Avisos desligados')
+    expect(alertsSummary({ enabled: false, days: [1], hour: 8, push: true, email: true })).toBe('Avisos desligados')
+    expect(alertsSummary({ ...DEFAULT_ALERTS, email: true })).toBe('1 dia antes · às 08h · notificação e e-mail')
+    expect(alertsSummary({ ...DEFAULT_ALERTS, push: false, email: true })).toBe('1 dia antes · às 08h · só por e-mail')
+    expect(alertsSummary({ ...DEFAULT_ALERTS, push: false })).toBe('1 dia antes · às 08h · só dentro do app')
   })
 })
 
@@ -213,7 +231,7 @@ describe('mensagens', () => {
 })
 
 describe('isAlertTime', () => {
-  const s = { enabled: true, days: [1], hour: 8 }
+  const s = { enabled: true, days: [1], hour: 8, push: true, email: false }
   it('só a partir da hora escolhida', () => {
     expect(isAlertTime(s, 7, '2026-11-09', null)).toBe(false)
     expect(isAlertTime(s, 8, '2026-11-09', null)).toBe(true)

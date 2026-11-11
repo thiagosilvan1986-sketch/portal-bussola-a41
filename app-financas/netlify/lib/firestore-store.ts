@@ -1,9 +1,12 @@
 import type { Firestore } from 'firebase-admin/firestore'
 import { normalizeAlerts } from '../../src/domain/alerts'
 import type { Bill, Entry, IsoDate } from '../../src/domain/types'
-import { adminDb } from './admin'
-import type { AlertsStore, PushSub } from './alerts-run'
+import { adminAuth, adminDb } from './admin'
+import type { AlertsStore, Channel, PushSub } from './alerts-run'
 import { parseSubscription } from './subscriptions'
+
+/** Campo de `settings/alertState` com o último dia avisado em cada canal (a notificação mantém o nome original). */
+const SENT_FIELD: Record<Channel, string> = { push: 'lastSent', email: 'lastSentEmail' }
 
 const BILL_DEFAULTS = {
   name: '',
@@ -57,15 +60,39 @@ export function firestoreStore(db: Firestore = adminDb()): AlertsStore {
     async removeSubscription(uid, id) {
       await user(uid).collection('pushSubscriptions').doc(id).delete()
     },
+    async emailUsers() {
+      // Sem filtro, a consulta não exige índice; só lê as configurações e guarda quem marcou o e-mail.
+      const snap = await db.collectionGroup('settings').select('email').get()
+      return snap.docs.flatMap((doc) => {
+        const uid = doc.ref.parent.parent?.id
+        return doc.id === 'alerts' && doc.get('email') === true && uid ? [uid] : []
+      })
+    },
+    async recipient(uid) {
+      try {
+        const account = await adminAuth().getUser(uid)
+        return account.email && account.emailVerified && !account.disabled ? account.email : null
+      } catch (e) {
+        if ((e as { code?: string }).code === 'auth/user-not-found') return null
+        throw e
+      }
+    },
     async settings(uid) {
       return normalizeAlerts((await user(uid).collection('settings').doc('alerts').get()).data())
     },
-    async lastSent(uid) {
-      const value = (await user(uid).collection('settings').doc('alertState').get()).data()?.lastSent
+    async lastSent(uid, channel) {
+      const value = (await user(uid).collection('settings').doc('alertState').get()).data()?.[SENT_FIELD[channel]]
       return typeof value === 'string' ? value : null
     },
-    async markSent(uid, date: IsoDate) {
-      await user(uid).collection('settings').doc('alertState').set({ lastSent: date }, { merge: true })
+    async markSent(uid, date: IsoDate, channel) {
+      await user(uid).collection('settings').doc('alertState').set({ [SENT_FIELD[channel]]: date }, { merge: true })
+    },
+    async lastTestEmail(uid) {
+      const value = (await user(uid).collection('settings').doc('alertState').get()).data()?.lastTestEmailAt
+      return typeof value === 'number' ? value : null
+    },
+    async markTestEmail(uid, at) {
+      await user(uid).collection('settings').doc('alertState').set({ lastTestEmailAt: at }, { merge: true })
     },
     async bills(uid) {
       const snap = await user(uid).collection('bills').get()
