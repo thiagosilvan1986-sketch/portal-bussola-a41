@@ -6,12 +6,15 @@ import { Delta } from '../components/Delta'
 import { DueHeatmap } from '../components/DueHeatmap'
 import { FlowChart } from '../components/FlowChart'
 import { MonthlyChart, type ChartMode } from '../components/MonthlyChart'
+import { SortControl } from '../components/SortControl'
 import { Sparkline } from '../components/Sparkline'
 import { useBills, useEntriesRange, usePeople, useReceivables, useToday } from '../data/hooks'
 import { useMoney, usePrivacy } from '../data/privacy'
+import { useSortChoice } from '../data/sortPrefs'
 import { withTransition } from '../data/transition'
 import { formatCompetence } from '../domain/dates'
 import { netOfReimbursements } from '../domain/linked'
+import { DEBTOR_SORTS, DEBTOR_SORT_DEFAULT, MONTH_SORT_DEFAULT, monthSorts, sortDebtorsBy, sortMonthsBy } from '../domain/listSorts'
 import {
   OTHER_CATEGORIES,
   PERIOD_KINDS,
@@ -134,6 +137,15 @@ export default function Reports() {
   const showBasis = hasLinked && scope !== 'receber'
   const realView = showBasis && basis === 'real'
   const payName = realView ? 'Gasto real' : 'A pagar'
+  // Ordem das listas do relatório. O gráfico e as contas seguem sempre em ordem de mês; só a tabela e a lista mudam.
+  const monthOptions = useMemo(
+    () => monthSorts({ showPay, showRecv, showBalance: scope === 'tudo', payLabel: payName }),
+    [showPay, showRecv, scope, payName],
+  )
+  const [monthSort, setMonthSort] = useSortChoice('relatorio-meses', monthOptions, MONTH_SORT_DEFAULT)
+  const tableRows = useMemo(() => sortMonthsBy(rows, monthSort), [rows, monthSort])
+  const [debtorSort, setDebtorSort] = useSortChoice('relatorio-devedores', DEBTOR_SORTS, DEBTOR_SORT_DEFAULT)
+  const debtors = useMemo(() => sortDebtorsBy(view.debtors, debtorSort), [view.debtors, debtorSort])
   const expected = balanceView(expectedBalance(totals))
   const realized = realizedBalance(totals)
   const overdue = totals.payOverdueCents + totals.recvOverdueCents
@@ -424,6 +436,9 @@ export default function Reports() {
 
               <section className="card stack vt-table" aria-label="Detalhamento por mês">
                 <h2>Detalhamento</h2>
+                {rows.length > 1 && (
+                  <SortControl label="Ordenação do detalhamento" options={monthOptions} value={monthSort} onChange={setMonthSort} />
+                )}
                 <div className="table-wrap">
                   <table className="report-table">
                     <thead>
@@ -435,7 +450,7 @@ export default function Reports() {
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((r) => {
+                      {tableRows.map((r) => {
                         const b = balanceView(r.recvTotalCents - r.payTotalCents)
                         return (
                           <tr key={r.competence}>
@@ -512,8 +527,11 @@ export default function Reports() {
               {showRecv && view.debtors.length > 0 && (
                 <section className="card stack" aria-label="Quem mais deve">
                   <h2>Quem mais deve neste período</h2>
+                  {debtors.length > 1 && (
+                    <SortControl label="Ordenação de quem mais deve" options={DEBTOR_SORTS} value={debtorSort} onChange={setDebtorSort} />
+                  )}
                   <ul className="list">
-                    {view.debtors.map((d) => (
+                    {debtors.map((d) => (
                       <li key={d.personId}>
                         <Link className="debtor-row" to={`/receber/pessoa/${d.personId}`}>
                           <span className="debtor-name">

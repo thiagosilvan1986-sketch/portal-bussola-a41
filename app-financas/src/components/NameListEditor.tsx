@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { useSortChoice } from '../data/sortPrefs'
+import { NAME_SORTS, NAME_SORT_DEFAULT, sortNamesBy } from '../domain/listSorts'
 import { copyName } from '../domain/registry'
 import { CopyButton } from './CopyButton'
+import { SortControl } from './SortControl'
 
 export interface NameItem {
   key: string
@@ -14,6 +17,8 @@ export interface NameItem {
 
 interface Props {
   title: string
+  /** Identifica a lista para guardar a ordem escolhida neste aparelho: "categorias", "pagamentos", "fornecedores". */
+  sortId: string
   intro: string
   /** "categoria", "forma de pagamento", "fornecedor": entra nos textos. */
   noun: string
@@ -36,7 +41,9 @@ const usage = (n: number) => (n === 0 ? 'Nenhuma conta usa' : n === 1 ? 'Usada e
 
 /** Lista editável (criar, renomear, excluir) usada em Categorias, Formas de pagamento e Fornecedores. */
 export function NameListEditor(props: Props) {
-  const { title, intro, noun, feminine, items, placeholder, movesOnDelete, defaultMoveTo, loading, onAdd, onRename, onRemove } = props
+  const { title, sortId, intro, noun, feminine, items, placeholder, movesOnDelete, defaultMoveTo, loading, onAdd, onRename, onRemove } = props
+  const [sort, setSort] = useSortChoice(`cadastro-${sortId}`, NAME_SORTS, NAME_SORT_DEFAULT)
+  const listed = sortNamesBy(items, sort)
   const [newName, setNewName] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
@@ -131,8 +138,10 @@ export function NameListEditor(props: Props) {
             </p>
           )}
 
+          {items.length > 1 && <SortControl label={`Ordenação de ${title.toLowerCase()}`} options={NAME_SORTS} value={sort} onChange={setSort} />}
+
           <ul className="list">
-            {items.map((item) => {
+            {listed.map((item) => {
               const others = items.filter((i) => i.key !== item.key)
               return (
                 <li key={item.key} className="row-card edit-row">

@@ -1,10 +1,14 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth";
+import { SortControl } from "../components/SortControl";
 import { useBills, useRegistry, useToday } from "../data/hooks";
+import { useSortChoice } from "../data/sortPrefs";
+import { BILL_SORTS, BILL_SORT_DEFAULT, sortBillsBy } from "../domain/listSorts";
 import { RECURRENCE_LABEL, endCompetence } from "../domain/bills";
 import { competenceOf, formatCompetenceShort } from "../domain/dates";
 import { paymentLabel } from "../domain/registry";
 import { useMoney } from "../data/privacy";
+import { useMemo } from "react";
 
 export default function Bills() {
   const money = useMoney();
@@ -12,11 +16,8 @@ export default function Bills() {
   const bills = useBills(uid);
   const registry = useRegistry(uid).data;
   const thisMonth = competenceOf(useToday());
-  const sorted = [...bills.data].sort(
-    (a, b) =>
-      Number(b.active) - Number(a.active) ||
-      a.name.localeCompare(b.name, "pt-BR"),
-  );
+  const [billSort, setBillSort] = useSortChoice("contas", BILL_SORTS, BILL_SORT_DEFAULT);
+  const sorted = useMemo(() => sortBillsBy(bills.data, billSort), [bills.data, billSort]);
 
   return (
     <main className="page">
@@ -48,46 +49,56 @@ export default function Bills() {
           </p>
         </div>
       ) : (
-        <ul className="list">
-          {sorted.map((b) => {
-            const last = b.installmentCount
-              ? endCompetence(b.startMonth, b.recurrence, b.installmentCount)
-              : null;
-            return (
-              <li
-                key={b.id}
-                className={b.active ? "row-card" : "row-card archived"}
-              >
-                <Link className="row-main" to={`/contas/${b.id}`}>
-                  <span className="row-title">{b.name}</span>
-                  <span className="muted">
-                    Dia {b.dueDay} · {RECURRENCE_LABEL[b.recurrence]} ·{" "}
-                    {paymentLabel(registry, b.paymentMethod)}
-                  </span>
-                  {last && (
+        <>
+          {sorted.length > 1 && (
+            <SortControl
+              label="Ordenação das contas cadastradas"
+              options={BILL_SORTS}
+              value={billSort}
+              onChange={setBillSort}
+            />
+          )}
+          <ul className="list">
+            {sorted.map((b) => {
+              const last = b.installmentCount
+                ? endCompetence(b.startMonth, b.recurrence, b.installmentCount)
+                : null;
+              return (
+                <li
+                  key={b.id}
+                  className={b.active ? "row-card" : "row-card archived"}
+                >
+                  <Link className="row-main" to={`/contas/${b.id}`}>
+                    <span className="row-title">{b.name}</span>
                     <span className="muted">
-                      {b.installmentCount}{" "}
-                      {b.installmentCount === 1 ? "parcela" : "parcelas"}, até{" "}
-                      {formatCompetenceShort(last)}
+                      Dia {b.dueDay} · {RECURRENCE_LABEL[b.recurrence]} ·{" "}
+                      {paymentLabel(registry, b.paymentMethod)}
                     </span>
-                  )}
-                  {!b.active && (
-                    <span className="chip chip-prevista">Arquivada</span>
-                  )}
-                  {b.active && last && last < thisMonth && (
-                    <span className="chip chip-prevista">Encerrada</span>
-                  )}
-                </Link>
-                <div className="row-side">
-                  <strong>{money(b.expectedAmountCents)}</strong>
-                  <span className="muted">
-                    {b.valueType === "fixed" ? "fixo" : "estimado"}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                    {last && (
+                      <span className="muted">
+                        {b.installmentCount}{" "}
+                        {b.installmentCount === 1 ? "parcela" : "parcelas"}, até{" "}
+                        {formatCompetenceShort(last)}
+                      </span>
+                    )}
+                    {!b.active && (
+                      <span className="chip chip-prevista">Arquivada</span>
+                    )}
+                    {b.active && last && last < thisMonth && (
+                      <span className="chip chip-prevista">Encerrada</span>
+                    )}
+                  </Link>
+                  <div className="row-side">
+                    <strong>{money(b.expectedAmountCents)}</strong>
+                    <span className="muted">
+                      {b.valueType === "fixed" ? "fixo" : "estimado"}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </main>
   );

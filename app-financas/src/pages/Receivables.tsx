@@ -1,7 +1,10 @@
 import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { SortControl } from '../components/SortControl'
 import { usePeople, useReceivables, useToday } from '../data/hooks'
+import { useSortChoice } from '../data/sortPrefs'
+import { PERSON_SORTS, PERSON_SORT_DEFAULT, sortPeopleBy } from '../domain/listSorts'
 import { formatCompetenceShort, formatDateBR } from '../domain/dates'
 import { useMoney } from '../data/privacy'
 import {
@@ -36,20 +39,15 @@ export default function Receivables() {
   const receivables = useReceivables(uid)
 
   // Pessoas que têm compra deste tipo. Quem ainda não tem nenhuma compra fica na lista do cartão.
+  const [personSort, setPersonSort] = useSortChoice('receber', PERSON_SORTS, PERSON_SORT_DEFAULT)
   const rows = useMemo(() => {
     const anyPurchase = new Set(receivables.data.map((r) => r.personId))
     const mine = ofKind(receivables.data, kind)
-    return people.data
+    const listed = people.data
       .filter((p) => mine.some((r) => r.personId === p.id) || (kind === 'cartao' && !anyPurchase.has(p.id)))
       .map((p) => ({ person: p, summary: summarizePerson(mine.filter((r) => r.personId === p.id), today) }))
-      .sort(
-        (a, b) =>
-          Number(b.summary.overdueCount > 0) - Number(a.summary.overdueCount > 0) ||
-          Number(b.summary.remainingCents > 0) - Number(a.summary.remainingCents > 0) ||
-          b.summary.remainingCents - a.summary.remainingCents ||
-          a.person.name.localeCompare(b.person.name, 'pt-BR'),
-      )
-  }, [people.data, receivables.data, kind, today])
+    return sortPeopleBy(listed, personSort)
+  }, [people.data, receivables.data, kind, today, personSort])
 
   const totals = useMemo(() => summarizePerson(ofKind(receivables.data, kind), today), [receivables.data, kind, today])
   const forecast = useMemo(() => forecastByMonth(ofKind(receivables.data, kind), today), [receivables.data, kind, today])
@@ -146,50 +144,55 @@ export default function Receivables() {
           </Link>
         </div>
       ) : (
-        <ul className="list">
-          {rows.map(({ person, summary }) => {
-            const overdue = summary.overdueCount > 0
-            const done = summary.purchaseCount > 0 && summary.remainingCents === 0
-            return (
-              <li key={person.id} className={`row-card ${overdue ? 'status-atrasada' : done ? 'status-paga' : ''}`}>
-                <Link className="row-main" to={`/receber/pessoa/${person.id}`}>
-                  <span className="row-title">{person.name}</span>
-                  <span className="muted">
-                    {summary.purchaseCount === 0
-                      ? 'Sem compras'
-                      : done
-                        ? summary.purchaseCount === 1
-                          ? '1 compra quitada'
-                          : `${summary.purchaseCount} compras quitadas`
-                        : `${summary.purchaseCount === 1 ? '1 compra' : `${summary.purchaseCount} compras`}${
-                            summary.nextDueDate ? ` · próxima parcela ${formatDateBR(summary.nextDueDate)}` : ''
-                          }`}
-                  </span>
-                  {overdue && (
-                    <span className="chip chip-atrasada">
-                      <span aria-hidden="true">⚠ </span>
-                      {summary.overdueCount === 1 ? '1 parcela atrasada' : `${summary.overdueCount} parcelas atrasadas`}
+        <>
+          {rows.length > 1 && (
+            <SortControl label="Ordenação das pessoas" options={PERSON_SORTS} value={personSort} onChange={setPersonSort} />
+          )}
+          <ul className="list">
+            {rows.map(({ person, summary }) => {
+              const overdue = summary.overdueCount > 0
+              const done = summary.purchaseCount > 0 && summary.remainingCents === 0
+              return (
+                <li key={person.id} className={`row-card ${overdue ? 'status-atrasada' : done ? 'status-paga' : ''}`}>
+                  <Link className="row-main" to={`/receber/pessoa/${person.id}`}>
+                    <span className="row-title">{person.name}</span>
+                    <span className="muted">
+                      {summary.purchaseCount === 0
+                        ? 'Sem compras'
+                        : done
+                          ? summary.purchaseCount === 1
+                            ? '1 compra quitada'
+                            : `${summary.purchaseCount} compras quitadas`
+                          : `${summary.purchaseCount === 1 ? '1 compra' : `${summary.purchaseCount} compras`}${
+                              summary.nextDueDate ? ` · próxima parcela ${formatDateBR(summary.nextDueDate)}` : ''
+                            }`}
                     </span>
+                    {overdue && (
+                      <span className="chip chip-atrasada">
+                        <span aria-hidden="true">⚠ </span>
+                        {summary.overdueCount === 1 ? '1 parcela atrasada' : `${summary.overdueCount} parcelas atrasadas`}
+                      </span>
+                    )}
+                    {done && (
+                      <span className="chip chip-paga">
+                        <span aria-hidden="true">✓ </span>Quitado
+                      </span>
+                    )}
+                    {summary.remainingCents > 0 && lastChargeText(person.charges, today) && (
+                      <span className="muted small-note">{lastChargeText(person.charges, today)}</span>
+                    )}
+                  </Link>
+                  {summary.purchaseCount > 0 && (
+                    <div className="row-side">
+                      <strong>{money(summary.remainingCents)}</strong>
+                      <span className="muted">falta</span>
+                    </div>
                   )}
-                  {done && (
-                    <span className="chip chip-paga">
-                      <span aria-hidden="true">✓ </span>Quitado
-                    </span>
-                  )}
-                  {summary.remainingCents > 0 && lastChargeText(person.charges, today) && (
-                    <span className="muted small-note">{lastChargeText(person.charges, today)}</span>
-                  )}
-                </Link>
-                {summary.purchaseCount > 0 && (
-                  <div className="row-side">
-                    <strong>{money(summary.remainingCents)}</strong>
-                    <span className="muted">falta</span>
-                  </div>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+                </li>
+              )
+            })}
+          </ul>
+        </>
       )}
     </main>
   )

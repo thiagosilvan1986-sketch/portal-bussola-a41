@@ -14,6 +14,7 @@ export default function Payments() {
   return (
     <NameListEditor
       title="Formas de pagamento"
+      sortId="pagamentos"
       intro="As opções que aparecem ao cadastrar uma conta. Renomear muda o nome em todas as contas que usam."
       noun="forma de pagamento"
       feminine

@@ -2243,3 +2243,21 @@ button.cat-row.active {
 .for-person {
   margin: -4px 0 0;
 }
+
+/* ---- Ordenação das listas: "Ordenar por" + sentido ---- */
+.sort-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.sort-field {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.sort-dir {
+  flex: 1 0 auto;
+  min-height: 44px;
+  gap: 6px;
+  white-space: nowrap;
+}

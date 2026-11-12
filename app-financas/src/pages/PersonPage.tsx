@@ -5,10 +5,14 @@ import { ChargeSheet } from '../components/ChargeSheet'
 import { ContactImport } from '../components/ContactImport'
 import { CopyButton } from '../components/CopyButton'
 import { DeleteButton } from '../components/DeleteButton'
+import { SortControl } from '../components/SortControl'
 import { StatusChip } from '../components/StatusChip'
 import { useBills, usePeople, useReceivables, useToday } from '../data/hooks'
+import { useSortChoice } from '../data/sortPrefs'
 import { deleteChargeLog, deletePerson, deleteReceivable, logCharge, setInstallmentPayment, updatePerson } from '../data/store'
 import { formatDateBR } from '../domain/dates'
+import { PURCHASE_SORTS, PURCHASE_SORT_DEFAULT, sortPurchasesBy, type PurchaseSortKey } from '../domain/listSorts'
+import type { SortChoice } from '../domain/sorting'
 import { useMoney } from '../data/privacy'
 import { centsToInput, parseBRLToCents } from '../domain/money'
 import { MoneyInput } from '../components/MoneyInput'
@@ -81,6 +85,7 @@ function Detail({
   const navigate = useNavigate()
   const [editingContact, setEditingContact] = useState(false)
   const [charging, setCharging] = useState<Receivable[] | null>(null)
+  const [purchaseSort, setPurchaseSort] = useSortChoice('pessoa', PURCHASE_SORTS, PURCHASE_SORT_DEFAULT)
 
   const kinds = RECEIVABLE_KINDS.filter((k) => ofKind(receivables, k).length > 0)
   const first = person.name.split(/\s+/)[0]
@@ -97,6 +102,10 @@ function Detail({
       <Contact uid={uid} person={person} editing={editingContact} setEditing={setEditingContact} />
 
       <ChargeHistory uid={uid} person={person} today={today} />
+
+      {receivables.length > 1 && (
+        <SortControl label="Ordenação das compras" options={PURCHASE_SORTS} value={purchaseSort} onChange={setPurchaseSort} />
+      )}
 
       {kinds.length === 0 ? (
         <div className="empty card">
@@ -127,6 +136,7 @@ function Detail({
             newPurchasePath={`/receber/nova?pessoa=${person.id}&tipo=${kind}`}
             showNewPurchase={idx === 0}
             receivables={ofKind(receivables, kind)}
+            sort={purchaseSort}
             billNames={billNames}
             onCharge={setCharging}
           />
@@ -185,6 +195,7 @@ function KindSection({
   newPurchasePath,
   showNewPurchase,
   receivables,
+  sort,
   billNames,
   onCharge,
 }: {
@@ -196,22 +207,12 @@ function KindSection({
   newPurchasePath: string
   showNewPurchase: boolean
   receivables: Receivable[]
+  sort: SortChoice<PurchaseSortKey>
   billNames: ReadonlyMap<string, string>
   onCharge: (list: Receivable[]) => void
 }) {
   const money = useMoney()
-  const sorted = useMemo(
-    () =>
-      [...receivables].sort((a, b) => {
-        const sa = summarizeReceivable(a, today)
-        const sb = summarizeReceivable(b, today)
-        return (
-          Number(sb.remainingCents > 0) - Number(sa.remainingCents > 0) ||
-          (sa.nextDueDate ?? '9999').localeCompare(sb.nextDueDate ?? '9999')
-        )
-      }),
-    [receivables, today],
-  )
+  const sorted = useMemo(() => sortPurchasesBy(receivables, sort, today), [receivables, sort, today])
   const summary = summarizePerson(receivables, today)
   const title = KIND_INFO[kind].title
 

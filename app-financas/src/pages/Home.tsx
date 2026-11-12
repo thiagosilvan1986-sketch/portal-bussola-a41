@@ -3,17 +3,24 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { DueSoonBanner } from '../components/DueSoonBanner'
 import { EntrySheet } from '../components/EntrySheet'
+import { SortControl } from '../components/SortControl'
 import { Welcome } from '../components/Welcome'
 import { StatusChip } from '../components/StatusChip'
 import { useBills, useEntries, usePeople, useReceivables, useToday } from '../data/hooks'
 import { ensureEntries, payEntry } from '../data/store'
 import { useMoney } from '../data/privacy'
+import { useSortChoice } from '../data/sortPrefs'
 import { dismissWelcome, isWelcomeDismissed } from '../data/welcome'
 import { installmentLabel } from '../domain/bills'
 import { linkOfEntry } from '../domain/linked'
 import { addMonths, competenceOf, formatCompetence, formatDateBR } from '../domain/dates'
 import { amountDue, displayStatus, isPending, remainingCents, sortEntries, summarize } from '../domain/entries'
+import { ENTRY_SORTS, ENTRY_SORT_DEFAULT, sortEntriesBy } from '../domain/listSorts'
 import { KIND_INFO, RECEIVABLE_KINDS, listPath, ofKind, summarizePerson } from '../domain/receivables'
+import type { Entry } from '../domain/types'
+
+/** O valor que a linha mostra: o que falta pagar, se pendente; senão, o valor da conta. A ordenação por valor segue o que se vê. */
+const shownCents = (e: Entry) => (isPending(e) ? remainingCents(e) : amountDue(e))
 
 export default function Home() {
   const money = useMoney()
@@ -51,7 +58,8 @@ export default function Home() {
     ensureEntries(uid, bills.data, [...targets]).catch((e) => console.warn('Não foi possível gerar lançamentos', e))
   }, [uid, bills.ready, bills.data, thisMonth, competence])
 
-  const sorted = useMemo(() => sortEntries(entries.data), [entries.data])
+  const [entrySort, setEntrySort] = useSortChoice('inicio', ENTRY_SORTS, ENTRY_SORT_DEFAULT)
+  const sorted = useMemo(() => sortEntriesBy(sortEntries(entries.data), entrySort, shownCents), [entries.data, entrySort])
   const summary = useMemo(() => summarize(entries.data, today), [entries.data, today])
   const selected = sorted.find((e) => e.id === selectedId) ?? null
   const dueToday = sorted.filter((e) => e.dueDate === today && isPending(e))
@@ -169,41 +177,46 @@ export default function Home() {
       ) : sorted.length === 0 ? (
         <p className="muted center-text">Nenhuma conta vence neste mês.</p>
       ) : (
-        <ul className="list">
-          {sorted.map((e) => {
-            const status = displayStatus(e, today)
-            const pending = isPending(e)
-            const toInform = pending && amountDue(e) === 0
-            return (
-              <li key={e.id} className={`row-card status-${status}`}>
-                <button className="row-main" onClick={() => setSelectedId(e.id)}>
-                  <span className="row-title">{e.billName}</span>
-                  <span className="muted">
-                    Vence {formatDateBR(e.dueDate)}
-                    {installmentLabel(e) && ` · ${installmentLabel(e)}`}
-                  </span>
-                  <StatusChip status={status} />
-                </button>
-                <div className="row-side">
-                  {toInform ? (
-                    <span className="muted">Valor a informar</span>
-                  ) : (
-                    <strong>{money(pending ? remainingCents(e) : amountDue(e))}</strong>
-                  )}
-                  {pending && !toInform && (
-                    <button
-                      className="check-btn labeled"
-                      aria-label={`Paguei ${e.billName}`}
-                      onClick={() => payEntry(uid, e.id, amountDue(e), today).catch((err) => console.error(err))}
-                    >
-                      <span aria-hidden="true">✓</span> Paguei
-                    </button>
-                  )}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <>
+          {sorted.length > 1 && (
+            <SortControl label="Ordenação das contas do mês" options={ENTRY_SORTS} value={entrySort} onChange={setEntrySort} />
+          )}
+          <ul className="list">
+            {sorted.map((e) => {
+              const status = displayStatus(e, today)
+              const pending = isPending(e)
+              const toInform = pending && amountDue(e) === 0
+              return (
+                <li key={e.id} className={`row-card status-${status}`}>
+                  <button className="row-main" onClick={() => setSelectedId(e.id)}>
+                    <span className="row-title">{e.billName}</span>
+                    <span className="muted">
+                      Vence {formatDateBR(e.dueDate)}
+                      {installmentLabel(e) && ` · ${installmentLabel(e)}`}
+                    </span>
+                    <StatusChip status={status} />
+                  </button>
+                  <div className="row-side">
+                    {toInform ? (
+                      <span className="muted">Valor a informar</span>
+                    ) : (
+                      <strong>{money(pending ? remainingCents(e) : amountDue(e))}</strong>
+                    )}
+                    {pending && !toInform && (
+                      <button
+                        className="check-btn labeled"
+                        aria-label={`Paguei ${e.billName}`}
+                        onClick={() => payEntry(uid, e.id, amountDue(e), today).catch((err) => console.error(err))}
+                      >
+                        <span aria-hidden="true">✓</span> Paguei
+                      </button>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </>
       )}
 
       {selected && <EntrySheet

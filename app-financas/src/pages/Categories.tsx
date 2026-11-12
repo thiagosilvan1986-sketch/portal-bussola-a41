@@ -14,6 +14,7 @@ export default function Categories() {
   return (
     <NameListEditor
       title="Categorias"
+      sortId="categorias"
       intro="Agrupam as contas nos relatórios. Renomear atualiza todas as contas e lançamentos que usam a categoria."
       noun="categoria"
       feminine

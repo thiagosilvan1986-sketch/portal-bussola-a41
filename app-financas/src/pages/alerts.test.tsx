@@ -560,6 +560,13 @@ describe('Sobre', () => {
     expect(item).toBeTruthy()
     expect(item!.text).toMatch(/celular ou no navegador/)
     expect(item!.text).toMatch(/e-mail/)
-    expect(FEATURES).toHaveLength(15)
+    expect(FEATURES).toHaveLength(16)
+  })
+
+  it('lista a ordenação das listas, com o que dá para escolher e onde fica guardado', () => {
+    const item = FEATURES.find((f) => f.title === 'Ordene como preferir')
+    expect(item).toBeTruthy()
+    expect(item!.text).toMatch(/Crescente ou Decrescente/)
+    expect(item!.text).toMatch(/neste aparelho/)
   })
 })

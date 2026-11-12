@@ -393,3 +393,76 @@ describe('Relatórios: gasto real (compra a receber ligada a uma conta)', () => 
     expect(flat(kpi('A receber').textContent)).toContain('R$ 300,00')
   })
 })
+
+describe('Relatórios: ordenação', () => {
+  const bruno: Person = { id: 'p2', name: 'Bruno Lima', phone: '', email: '', charges: [] }
+  // Bruno deve R$ 500,00 numa parcela única que vence em 10/12 (não está atrasada).
+  const mochila: Receivable = {
+    id: 'r2',
+    personId: 'p2',
+    kind: 'cartao',
+    description: 'Mochila',
+    totalCents: 50000,
+    installmentCount: 1,
+    firstDueDate: '2026-12-10',
+    installments: buildInstallments(50000, 1, '2026-12-10'),
+    notes: '',
+  }
+  const debtorNames = () => Array.from(document.querySelectorAll('.debtor-name')).map((el) => (el.firstChild?.textContent ?? '').trim())
+  const group = (name: string) => within(screen.getByRole('group', { name }))
+  const pick = (name: string, option: string) => {
+    const select = group(name).getByLabelText('Ordenar por') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: Array.from(select.options).find((o) => o.textContent === option)!.value } })
+  }
+  const monthRows = () =>
+    within(screen.getByRole('table'))
+      .getAllByRole('row')
+      .slice(1, -1)
+      .map((r) => flat(r.querySelector('th,td')?.textContent ?? null).trim())
+
+  beforeEach(() => {
+    hooks.usePeople.mockReturnValue(live([ana, bruno]))
+    hooks.useReceivables.mockReturnValue(live([tenis, mochila]))
+  })
+
+  it('"Quem mais deve" abre pelo maior valor em aberto e ordena por nome', () => {
+    renderReports()
+    expect(debtorNames()).toEqual(['Bruno Lima', 'Ana Souza'])
+    const select = group('Ordenação de quem mais deve').getByLabelText('Ordenar por') as HTMLSelectElement
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Valor em aberto', 'Nome'])
+    pick('Ordenação de quem mais deve', 'Nome')
+    expect(debtorNames()).toEqual(['Ana Souza', 'Bruno Lima'])
+    fireEvent.click(group('Ordenação de quem mais deve').getByRole('button'))
+    expect(debtorNames()).toEqual(['Bruno Lima', 'Ana Souza'])
+  })
+
+  it('com um devedor só, não há seletor em "Quem mais deve"', () => {
+    hooks.usePeople.mockReturnValue(live([ana]))
+    hooks.useReceivables.mockReturnValue(live([tenis]))
+    renderReports()
+    expect(screen.queryByRole('group', { name: 'Ordenação de quem mais deve' })).toBeNull()
+  })
+
+  it('"Detalhamento" abre mês a mês e ordena pelas colunas da tabela, com o total sempre no fim', () => {
+    renderReports()
+    expect(monthRows()).toEqual(['out', 'nov', 'dez*'])
+    const select = group('Ordenação do detalhamento').getByLabelText('Ordenar por') as HTMLSelectElement
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Mês', 'A pagar', 'A receber', 'Saldo'])
+    pick('Ordenação do detalhamento', 'A receber')
+    expect(monthRows()[0]).toBe('dez*') // dezembro: R$ 100 de Ana + R$ 500 de Bruno
+    const rows = within(screen.getByRole('table')).getAllByRole('row')
+    expect(flat(rows.at(-1)!.textContent)).toContain('Total')
+    fireEvent.click(group('Ordenação do detalhamento').getByRole('button'))
+    expect(monthRows().at(-1)).toBe('dez*')
+  })
+
+  it('a ordem dos relatórios fica guardada neste aparelho', () => {
+    const first = renderReports()
+    pick('Ordenação de quem mais deve', 'Nome')
+    pick('Ordenação do detalhamento', 'A receber')
+    first.unmount()
+    renderReports()
+    expect(debtorNames()).toEqual(['Ana Souza', 'Bruno Lima'])
+    expect(monthRows()[0]).toBe('dez*')
+  })
+})

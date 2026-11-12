@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
 import { useMoney } from '../data/privacy'
+import { useSortChoice } from '../data/sortPrefs'
 import { amountDue, displayStatus } from '../domain/entries'
 import { formatDateBR } from '../domain/dates'
+import { ENTRY_SORTS, ENTRY_SORT_DEFAULT, SLICE_SORTS, SLICE_SORT_DEFAULT, sortEntriesBy, sortSlicesBy } from '../domain/listSorts'
 import {
   OTHER_CATEGORIES,
   categoryEntries,
@@ -11,6 +13,7 @@ import {
   type CategorySlice,
 } from '../domain/reports'
 import type { Competence, Entry, IsoDate } from '../domain/types'
+import { SortControl } from './SortControl'
 import { StatusChip } from './StatusChip'
 
 const SIZE = 168
@@ -48,6 +51,9 @@ export function CategorySection({ slices, entries, months, today, category, onSe
   const active = sliceOf(slices, category)
   const members = category === null ? [] : category === OTHER_CATEGORIES ? (slices.find((s) => s.category === OTHER_CATEGORIES)?.members ?? []) : [category]
   const maxShare = Math.max(...slices.map((s) => s.totalCents), 1)
+  // A ordem da lista é escolha da pessoa; a rosquinha e as cores seguem sempre o tamanho de cada categoria.
+  const [sliceSort, setSliceSort] = useSortChoice('relatorio-categorias', SLICE_SORTS, SLICE_SORT_DEFAULT)
+  const listed = sortSlicesBy(slices, sliceSort)
 
   let offset = 0
   const arcs = slices.map((s) => {
@@ -108,8 +114,12 @@ export function CategorySection({ slices, entries, months, today, category, onSe
         </div>
       </div>
 
+      {slices.length > 1 && (
+        <SortControl label="Ordenação das categorias" options={SLICE_SORTS} value={sliceSort} onChange={setSliceSort} />
+      )}
+
       <ul className="cat-list">
-        {slices.map((s) => {
+        {listed.map((s) => {
           const isActive = active?.category === s.category
           return (
             <li key={s.category}>
@@ -164,7 +174,8 @@ const TP = 8
 
 function CategoryDetail({ title, color, entries, months, members, today, onClear }: DetailProps) {
   const money = useMoney()
-  const list = categoryEntries(entries, months, members)
+  const [entrySort, setEntrySort] = useSortChoice('relatorio-contas-categoria', ENTRY_SORTS, ENTRY_SORT_DEFAULT)
+  const list = sortEntriesBy(categoryEntries(entries, months, members), entrySort, amountDue)
   const trend = categoryTrend(entries, months, members)
   const max = Math.max(...trend, 1)
   const slot = (TW - TP * 2) / months.length
@@ -216,6 +227,10 @@ function CategoryDetail({ title, color, entries, months, members, today, onClear
           </tbody>
         </table>
       </div>
+
+      {list.length > 1 && (
+        <SortControl label="Ordenação das contas da categoria" options={ENTRY_SORTS} value={entrySort} onChange={setEntrySort} />
+      )}
 
       <ul className="list cat-bills">
         {list.map((e) => (

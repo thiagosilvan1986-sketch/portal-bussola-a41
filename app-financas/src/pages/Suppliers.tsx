@@ -14,6 +14,7 @@ export default function Suppliers() {
   return (
     <NameListEditor
       title="Fornecedores"
+      sortId="fornecedores"
       intro="Cadastro opcional. Na conta, o campo Fornecedor sugere esta lista, e você pode digitar outro nome quando quiser."
       noun="fornecedor"
       feminine={false}
