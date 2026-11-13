@@ -338,29 +338,56 @@ export function firstShortfall(rows: MonthReport[], series: number[]): Competenc
 
 /* ---------- Mapa de vencimentos ---------- */
 
+/** Um vencimento do dia: a conta (ou a parcela a receber), a data e o valor. */
+export interface DueItem {
+  name: string
+  dueDate: IsoDate
+  cents: number
+}
+
 export interface DueDay {
   /** 1 a 31 */
   day: number
   totalCents: number
   count: number
+  /** Cada vencimento do dia, em ordem de data e depois de nome. */
+  items: DueItem[]
 }
 
-/** Em que dia do mês cai cada vencimento do período: 31 posições, do dia 1 ao 31. */
-export function dueDayMap(entries: Entry[], receivables: Receivable[], months: Competence[], scope: 'pagar' | 'receber'): DueDay[] {
+/**
+ * Em que dia do mês cai cada vencimento do período: 31 posições, do dia 1 ao 31. `people` dá o nome de quem paga
+ * cada parcela a receber ("Ana · Tênis 2/3").
+ */
+export function dueDayMap(
+  entries: Entry[],
+  receivables: Receivable[],
+  months: Competence[],
+  scope: 'pagar' | 'receber',
+  people: readonly Person[] = [],
+): DueDay[] {
   const inRange = new Set(months)
-  const days: DueDay[] = Array.from({ length: 31 }, (_, k) => ({ day: k + 1, totalCents: 0, count: 0 }))
-  const add = (dueDate: IsoDate, cents: number) => {
+  const days: DueDay[] = Array.from({ length: 31 }, (_, k) => ({ day: k + 1, totalCents: 0, count: 0, items: [] }))
+  const add = (dueDate: IsoDate, cents: number, name: string) => {
     if (cents <= 0) return
     const slot = days[Number(dueDate.slice(8, 10)) - 1]
     if (!slot) return
     slot.totalCents += cents
     slot.count += 1
+    slot.items.push({ name, dueDate, cents })
   }
   if (scope === 'pagar') {
-    for (const e of entries) if (inRange.has(e.competence)) add(e.dueDate, amountDue(e))
+    for (const e of entries) if (inRange.has(e.competence)) add(e.dueDate, amountDue(e), e.billName)
   } else {
-    for (const r of receivables) for (const i of r.installments) if (inRange.has(competenceOf(i.dueDate))) add(i.dueDate, i.amountCents)
+    const who = new Map(people.map((p) => [p.id, p.name]))
+    for (const r of receivables)
+      for (const i of r.installments)
+        if (inRange.has(competenceOf(i.dueDate))) {
+          const parcel = r.installmentCount > 1 ? ` ${i.number}/${r.installmentCount}` : ''
+          const person = who.get(r.personId)
+          add(i.dueDate, i.amountCents, `${person ? `${person} · ` : ''}${r.description}${parcel}`)
+        }
   }
+  for (const d of days) d.items.sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.name.localeCompare(b.name, 'pt-BR'))
   return days
 }
 

@@ -1,3 +1,5 @@
+import { formatDateBR } from '../domain/dates'
+import { CURRENT_VERSION } from '../domain/versions'
 import { FeatureList } from '../components/FeatureList'
 
 /** Sobre: a lista fixa de funcionalidades do app. Fica sempre em dia com o que o app faz. */
@@ -7,6 +9,9 @@ export default function About() {
       <header className="page-head">
         <h1>Sobre</h1>
       </header>
+      <p className="muted app-version">
+        Versão {CURRENT_VERSION.version} · atualizado em {formatDateBR(CURRENT_VERSION.date)}
+      </p>
 
       <section className="card stack welcome" aria-label="Funcionalidades do Contas em Dia">
         <div className="welcome-hero">

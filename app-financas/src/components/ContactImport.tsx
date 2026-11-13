@@ -1,9 +1,47 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { parseVCards, pickPhoneContact, supportsContactPicker, type ContactData } from '../domain/contacts'
 
 interface Props {
   /** Recebe o contato escolhido; quem usa preenche os campos e a pessoa confere antes de salvar. */
   onPick: (contact: ContactData) => void
+}
+
+/*
+ * A agenda do celular abre por cima do navegador. Alguns celulares recarregam a página (ou a tela) nesse meio-tempo
+ * e o contato escolhido se perdia. Por isso o app anota que a agenda está aberta e guarda o contato recebido por
+ * alguns minutos nesta aba (sessionStorage): a tela que estiver aberta ao voltar preenche os campos ou explica o que houve.
+ */
+const OPEN_KEY = 'contas-em-dia:agenda-aberta'
+const RESULT_KEY = 'contas-em-dia:agenda-contato'
+const RESULT_EVENT = 'contas-em-dia:agenda-contato'
+const FRESH_MS = 3 * 60 * 1000
+
+function store(key: string, value: unknown) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), path: window.location.pathname, value }))
+  } catch {
+    /* sem armazenamento: segue sem a proteção */
+  }
+}
+function take<T>(key: string): T | null {
+  try {
+    const raw = sessionStorage.getItem(key)
+    if (!raw) return null
+    sessionStorage.removeItem(key)
+    const { at, path, value } = JSON.parse(raw) as { at: number; path: string; value: T }
+    // Só vale na mesma tela em que a agenda foi aberta, e por poucos minutos.
+    return Date.now() - at < FRESH_MS && path === window.location.pathname ? value : null
+  } catch {
+    return null
+  }
+}
+
+/** O que veio da agenda, para a pessoa (e o suporte) saberem o que chegou. */
+function receivedText(c: ContactData): string {
+  const got = [c.name && 'nome', c.phone && 'telefone', c.email && 'e-mail'].filter(Boolean)
+  const digits = c.phone.replace(/\D/g, '')
+  const ddd = c.phone && digits.length < 10 ? ' O telefone veio sem DDD: acrescente antes de salvar.' : ''
+  return got.length === 0 ? '' : ` Recebido: ${got.join(', ')}.${ddd}`
 }
 
 function readText(file: File): Promise<string> {
@@ -25,16 +63,64 @@ export function ContactImport({ onPick }: Props) {
   const canPick = supportsContactPicker()
 
   function done(contact: ContactData, extra = '') {
+    if (!contact.name && !contact.phone && !contact.email) {
+      setMessage({ text: 'A agenda devolveu o contato sem nome, telefone nem e-mail. Confira se esses dados estão marcados na agenda, ou digite.', error: true })
+      return
+    }
     onPick(contact)
-    setMessage({ text: `Contato importado${contact.name ? `: ${contact.name}` : ''}. Confira os dados antes de salvar.${extra}`, error: false })
+    setMessage({
+      text: `Contato importado${contact.name ? `: ${contact.name}` : ''}.${receivedText(contact)} Confira os dados antes de salvar.${extra}`,
+      error: false,
+    })
   }
+  const doneRef = useRef(done)
+  useEffect(() => {
+    doneRef.current = done
+  })
+
+  // Ao abrir a tela (ou quando a agenda responde depois de a tela ter sido refeita), usa o contato guardado.
+  useEffect(() => {
+    const apply = () => {
+      const saved = take<ContactData>(RESULT_KEY)
+      if (saved) {
+        sessionStorage.removeItem(OPEN_KEY)
+        doneRef.current(saved)
+        return
+      }
+      if (take<boolean>(OPEN_KEY)) {
+        setMessage({
+          text: 'A agenda foi aberta, mas o app recarregou antes de receber o contato. Tente de novo; se repetir, use “Importar contato (.vcf)” ou digite os dados.',
+          error: true,
+        })
+      }
+    }
+    apply()
+    window.addEventListener(RESULT_EVENT, apply)
+    return () => window.removeEventListener(RESULT_EVENT, apply)
+  }, [])
 
   async function fromPhone() {
     setMessage(null)
+    store(OPEN_KEY, true)
     try {
       const contact = await pickPhoneContact()
-      if (contact) done(contact)
+      if (!contact) {
+        try {
+          sessionStorage.removeItem(OPEN_KEY)
+        } catch {
+          /* nada */
+        }
+        setMessage({ text: 'Nenhum contato foi escolhido. Toque no contato e depois em Concluído.', error: true })
+        return
+      }
+      store(RESULT_KEY, contact)
+      window.dispatchEvent(new Event(RESULT_EVENT))
     } catch (e) {
+      try {
+        sessionStorage.removeItem(OPEN_KEY)
+      } catch {
+        /* nada */
+      }
       console.error(e)
       setMessage({ text: 'Não foi possível abrir a agenda. Importe um arquivo .vcf ou digite os dados.', error: true })
     }

@@ -303,8 +303,21 @@ describe('Relatórios', () => {
     fireEvent.click(day10)
     expect(flat(map.querySelector('.chart-readout')!.textContent)).toContain('Dia 10: R$ 3.000,00 em 3 vencimentos')
     expect(day10.getAttribute('aria-pressed')).toBe('true')
-    const list = map.querySelector('.heat-list')!
-    expect(list.querySelectorAll('li')).toHaveLength(2)
+    // o dia tocado mostra as contas dele, com a data (o período tem 3 meses)
+    const items = within(map).getByRole('list', { name: 'Vencimentos do dia 10' })
+    expect(within(items).getAllByRole('listitem').map((li) => flat(li.textContent))).toEqual([
+      '10/10 · AluguelR$ 1.000,00',
+      '10/11 · AluguelR$ 1.000,00',
+      '10/12 · AluguelR$ 1.000,00',
+    ])
+    // lista: Detalhado (padrão) traz conta por conta; Consolidado, um total por dia
+    const list = map.querySelector('.heat-list') as HTMLElement
+    const modes = within(list).getByRole('group', { name: 'Como mostrar a lista' })
+    expect(within(modes).getByRole('button', { name: 'Detalhado' }).getAttribute('aria-pressed')).toBe('true')
+    expect(flat(list.querySelector('.heat-detail')!.textContent)).toContain('Energia')
+    fireEvent.click(within(modes).getByRole('button', { name: 'Consolidado' }))
+    expect(list.querySelector('.heat-detail')).toBeNull()
+    expect(list.querySelectorAll('ul > li')).toHaveLength(2)
   })
 
   it('o fluxo do dinheiro fecha os dois lados e escolher uma categoria nele abre as contas dela', () => {

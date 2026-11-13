@@ -120,7 +120,7 @@ export default function Reports() {
       allEntries: nowEntries,
       reimbursedCents: netNow?.reimbursedCents ?? 0,
       notReceivedCents: netNow?.notReceivedCents ?? 0,
-      heat: dueDayMap(pick(nowEntries), receivablesNow, months, scope === 'receber' ? 'receber' : 'pagar'),
+      heat: dueDayMap(pick(nowEntries), receivablesNow, months, scope === 'receber' ? 'receber' : 'pagar', people.data),
       hasAny: slices.length > 0 || recvAll > 0,
       flow: scope !== 'receber' ? flowModel(slices, recvAll) : null,
       debtors: topDebtors(receivables.data, people.data, months, today),
@@ -521,7 +521,7 @@ export default function Reports() {
                   {scope === 'receber' ? 'Dias em que as parcelas a receber vencem' : 'Dias em que as contas a pagar vencem'}, somando os meses do período.
                   {scope === 'tudo' ? ' Escolha A receber nos filtros para ver as parcelas.' : ''}
                 </p>
-                <DueHeatmap key={`${scope}-${category ?? ''}-${sectionKey}`} days={view.heat} tone={scope === 'receber' ? 'receber' : 'pagar'} />
+                <DueHeatmap key={`${scope}-${category ?? ''}-${sectionKey}`} days={view.heat} tone={scope === 'receber' ? 'receber' : 'pagar'} multiMonth={months.length > 1} />
               </section>
 
               {showRecv && view.debtors.length > 0 && (

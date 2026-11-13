@@ -108,14 +108,19 @@ describe('mapa de vencimentos', () => {
   it('soma o que vence em cada dia do mês, nos 31 dias', () => {
     const map = dueDayMap(entries, [], months, 'pagar')
     expect(map).toHaveLength(31)
-    expect(map[4]).toEqual({ day: 5, totalCents: 40000, count: 2 })
-    expect(map[9]).toEqual({ day: 10, totalCents: 100000, count: 1 })
+    expect(map[4]).toMatchObject({ day: 5, totalCents: 40000, count: 2 })
+    expect(map[4].items).toEqual([
+      { name: 'Energia', dueDate: '2026-10-05', cents: 20000 },
+      { name: 'Energia', dueDate: '2026-11-05', cents: 20000 },
+    ])
+    expect(map[9]).toMatchObject({ day: 10, totalCents: 100000, count: 1 })
     expect(map[19].count).toBe(0)
   })
 
   it('para o que se recebe, usa o vencimento de cada parcela', () => {
-    const map = dueDayMap([], [recv('r1', 30000, '2026-10-12', 3)], months, 'receber')
-    expect(map[11]).toEqual({ day: 12, totalCents: 20000, count: 2 })
+    const map = dueDayMap([], [recv('r1', 30000, '2026-10-12', 3)], months, 'receber', [{ id: 'p1', name: 'Ana', phone: '', email: '', charges: [] }])
+    expect(map[11]).toMatchObject({ day: 12, totalCents: 20000, count: 2 })
+    expect(map[11].items.map((i) => i.name)).toEqual(['Ana · r1 1/3', 'Ana · r1 2/3'])
     expect(map.filter((d) => d.count > 0)).toHaveLength(1)
   })
 

@@ -2292,3 +2292,42 @@ button.cat-row.active {
 .segmented .font-size-grande {
   font-size: 1.1em;
 }
+
+/* Versão do app (topo do Sobre) e de cada funcionalidade. */
+.app-version {
+  margin: -6px 0 0;
+}
+.feature-version {
+  font-size: 0.8rem;
+}
+
+/* Mapa de vencimentos: as contas do dia escolhido e a lista Detalhado | Consolidado. */
+.heat-list .segmented {
+  margin: 4px 0 6px;
+}
+ul.heat-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+ul.heat-items > li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.heat-detail > li {
+  display: block;
+}
+.heat-list .heat-detail ul.heat-items > li {
+  padding-left: 12px;
+  border-bottom: 0;
+}
+.heat-day-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 650;
+}

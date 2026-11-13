@@ -719,7 +719,7 @@ describe('Contato da agenda', () => {
     expect(field(/E-mail/).value).toBe('bia@exemplo.com')
   })
 
-  it('fechar o seletor sem escolher não muda nada', async () => {
+  it('fechar o seletor sem escolher não muda os campos e explica o que fazer', async () => {
     ;(navigator as unknown as { contacts: unknown }).contacts = { select: vi.fn().mockResolvedValue([]) }
     ;(window as unknown as { ContactsManager: unknown }).ContactsManager = class {}
     setData([], [])
@@ -727,7 +727,7 @@ describe('Contato da agenda', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
     await waitFor(() => expect((navigator as unknown as { contacts: { select: ReturnType<typeof vi.fn> } }).contacts.select).toHaveBeenCalled())
     expect(field('Nome da pessoa').value).toBe('')
-    expect(screen.queryByRole('status')).toBeNull()
+    expect((await screen.findByRole('alert')).textContent).toBe('Nenhum contato foi escolhido. Toque no contato e depois em Concluído.')
   })
 
   it('na edição do contato da pessoa também dá para importar', async () => {
