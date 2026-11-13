@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMoney } from '../data/privacy'
-import { heatLevel, type DueDay } from '../domain/reports'
+import { heatLevel, type DueDay, type DueItem } from '../domain/reports'
 
 interface Props {
   days: DueDay[]
@@ -8,6 +8,26 @@ interface Props {
   tone: 'pagar' | 'receber'
   /** Período de mais de um mês: cada vencimento mostra a data (o mesmo dia aparece em meses diferentes). */
   multiMonth?: boolean
+  /** Toque numa conta (ou parcela) do mapa. Sem isto, as linhas são só texto. */
+  onOpen?: (item: DueItem) => void
+}
+
+/**
+ * A situação do pagamento em palavras e ícone (a cor sozinha não basta): Paga, Parcial, Atrasada ou Pendente.
+ * No que se recebe, "Paga" vira "Recebida". Mês sem lançamento é "Prevista": ainda não há o que pagar.
+ */
+export function pendency(item: DueItem, tone: 'pagar' | 'receber'): { cls: string; icon: string; label: string } {
+  if (item.projected) return { cls: 'chip-prevista', icon: '○', label: 'Prevista' }
+  switch (item.status) {
+    case 'paga':
+      return { cls: 'chip-paga', icon: '✓', label: tone === 'receber' ? 'Recebida' : 'Paga' }
+    case 'parcial':
+      return { cls: 'chip-parcial', icon: '◐', label: 'Parcial' }
+    case 'atrasada':
+      return { cls: 'chip-atrasada', icon: '⚠', label: 'Atrasada' }
+    default:
+      return { cls: 'chip-vence_em_breve', icon: '◔', label: 'Pendente' }
+  }
 }
 
 type ListMode = 'detalhado' | 'consolidado'
@@ -26,7 +46,7 @@ function contas(count: number): string {
  * Toque num dia para ver o valor e as contas dele; a lista abaixo traz os mesmos números sem depender da cor,
  * conta por conta (Detalhado) ou só o total de cada dia (Consolidado).
  */
-export function DueHeatmap({ days, tone, multiMonth = false }: Props) {
+export function DueHeatmap({ days, tone, multiMonth = false, onOpen }: Props) {
   const money = useMoney()
   const [picked, setPicked] = useState<number | null>(null)
   const [mode, setMode] = useState<ListMode>('detalhado')
@@ -34,6 +54,39 @@ export function DueHeatmap({ days, tone, multiMonth = false }: Props) {
   const busiest = days.find((d) => d.totalCents === max && max > 0) ?? null
   const withDue = days.filter((d) => d.count > 0)
   const current = picked !== null ? days[picked - 1] : null
+
+  function row(i: DueItem, k: number) {
+    const p = pendency(i, tone)
+    const text = (
+      <>
+        <span className="heat-item-main">
+          <span>
+            {multiMonth && <span className="muted">{shortDate(i.dueDate)} · </span>}
+            {i.name}
+          </span>
+          <strong>{money(i.cents)}</strong>
+        </span>
+        <span className="heat-item-sub">
+          <span className={`chip ${p.cls} status-chip`}>
+            <span aria-hidden="true">{p.icon} </span>
+            {p.label}
+          </span>
+          {onOpen && <span className="heat-open">Ver detalhes ›</span>}
+        </span>
+      </>
+    )
+    return (
+      <li key={k}>
+        {onOpen ? (
+          <button type="button" className="heat-item" aria-label={`${i.name}, ${money(i.cents)}, ${p.label}. Ver detalhes`} onClick={() => onOpen(i)}>
+            {text}
+          </button>
+        ) : (
+          <div className="heat-item">{text}</div>
+        )}
+      </li>
+    )
+  }
 
   return (
     <div className={`heatmap ${tone === 'pagar' ? 'heat-pay' : 'heat-recv'}`}>
@@ -84,15 +137,7 @@ export function DueHeatmap({ days, tone, multiMonth = false }: Props) {
       </p>
       {current && current.items.length > 0 && (
         <ul className="heat-items" aria-label={`Vencimentos do dia ${current.day}`}>
-          {current.items.map((i, k) => (
-            <li key={k}>
-              <span>
-                {multiMonth && <span className="muted">{shortDate(i.dueDate)} · </span>}
-                {i.name}
-              </span>
-              <strong>{money(i.cents)}</strong>
-            </li>
-          ))}
+          {current.items.map(row)}
         </ul>
       )}
 
@@ -125,15 +170,7 @@ export function DueHeatmap({ days, tone, multiMonth = false }: Props) {
                     <strong>{money(d.totalCents)}</strong>
                   </div>
                   <ul className="heat-items">
-                    {d.items.map((i, k) => (
-                      <li key={k}>
-                        <span>
-                          {multiMonth && <span className="muted">{shortDate(i.dueDate)} · </span>}
-                          {i.name}
-                        </span>
-                        <span>{money(i.cents)}</span>
-                      </li>
-                    ))}
+                    {d.items.map(row)}
                   </ul>
                 </li>
               ))}

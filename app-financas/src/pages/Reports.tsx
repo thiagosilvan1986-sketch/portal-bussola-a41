@@ -4,6 +4,8 @@ import { useAuth } from '../auth'
 import { CategorySection } from '../components/CategorySection'
 import { Delta } from '../components/Delta'
 import { DueHeatmap } from '../components/DueHeatmap'
+import { DueItemSheet } from '../components/DueItemSheet'
+import { EntrySheet } from '../components/EntrySheet'
 import { FlowChart } from '../components/FlowChart'
 import { MonthlyChart, type ChartMode } from '../components/MonthlyChart'
 import { SortControl } from '../components/SortControl'
@@ -13,7 +15,7 @@ import { useMoney, usePrivacy } from '../data/privacy'
 import { useSortChoice } from '../data/sortPrefs'
 import { withTransition } from '../data/transition'
 import { formatCompetence } from '../domain/dates'
-import { netOfReimbursements } from '../domain/linked'
+import { linkOfEntry, netOfReimbursements } from '../domain/linked'
 import { DEBTOR_SORTS, DEBTOR_SORT_DEFAULT, MONTH_SORT_DEFAULT, monthSorts, sortDebtorsBy, sortMonthsBy } from '../domain/listSorts'
 import {
   OTHER_CATEGORIES,
@@ -43,6 +45,7 @@ import {
   shiftPeriod,
   sumMonths,
   topDebtors,
+  type DueItem,
   type PeriodKind,
   type Scope,
 } from '../domain/reports'
@@ -71,6 +74,8 @@ export default function Reports() {
   const [category, setCategory] = useState<string | null>(null)
   const [mode, setMode] = useState<ChartMode>('barras')
   const [selected, setSelected] = useState<string | null>(null)
+  // Conta ou parcela tocada no mapa de vencimentos (abre o painel de detalhes).
+  const [opened, setOpened] = useState<DueItem | null>(null)
   // Bruto: o que se paga nas contas. Real: o mesmo, menos o que as pessoas devolvem pelas contas ligadas a compras a receber.
   const [basis, setBasis] = useState<'bruto' | 'real'>('bruto')
 
@@ -120,13 +125,19 @@ export default function Reports() {
       allEntries: nowEntries,
       reimbursedCents: netNow?.reimbursedCents ?? 0,
       notReceivedCents: netNow?.notReceivedCents ?? 0,
-      heat: dueDayMap(pick(nowEntries), receivablesNow, months, scope === 'receber' ? 'receber' : 'pagar', people.data),
+      heat: dueDayMap(pick(nowEntries), receivablesNow, months, scope === 'receber' ? 'receber' : 'pagar', people.data, {
+        today,
+        recorded: new Map(entries.data.map((e) => [e.id, e])),
+      }),
       hasAny: slices.length > 0 || recvAll > 0,
       flow: scope !== 'receber' ? flowModel(slices, recvAll) : null,
       debtors: topDebtors(receivables.data, people.data, months, today),
       hasProjection: wantPay && now.projectedMonths.size > 0,
     }
   }, [entries.data, before.data, bills.data, receivables.data, people.data, months, previous, today, scope, category, basis])
+
+  // A conta tocada no mapa, como foi gravada (com pagamento e dados da cobrança), para a folha de detalhe.
+  const openedEntry = opened?.kind === 'conta' && !opened.projected ? (entries.data.find((e) => e.id === opened.entryId) ?? null) : null
 
   const ready = entries.ready && before.ready && bills.ready && receivables.ready && people.ready
   const failed = entries.error || before.error || bills.error || receivables.error
@@ -521,7 +532,7 @@ export default function Reports() {
                   {scope === 'receber' ? 'Dias em que as parcelas a receber vencem' : 'Dias em que as contas a pagar vencem'}, somando os meses do período.
                   {scope === 'tudo' ? ' Escolha A receber nos filtros para ver as parcelas.' : ''}
                 </p>
-                <DueHeatmap key={`${scope}-${category ?? ''}-${sectionKey}`} days={view.heat} tone={scope === 'receber' ? 'receber' : 'pagar'} multiMonth={months.length > 1} />
+                <DueHeatmap key={`${scope}-${category ?? ''}-${sectionKey}`} days={view.heat} tone={scope === 'receber' ? 'receber' : 'pagar'} multiMonth={months.length > 1} onOpen={setOpened} />
               </section>
 
               {showRecv && view.debtors.length > 0 && (
@@ -558,6 +569,19 @@ export default function Reports() {
             </>
           )}
         </>
+      )}
+      {openedEntry ? (
+        <EntrySheet
+          key={openedEntry.id}
+          uid={uid}
+          entry={openedEntry}
+          today={today}
+          billExists={bills.data.some((b) => b.id === openedEntry.billId)}
+          link={linkOfEntry(openedEntry, receivables.data, people.data)}
+          onClose={() => setOpened(null)}
+        />
+      ) : (
+        opened && <DueItemSheet item={opened} tone={scope === 'receber' ? 'receber' : 'pagar'} onClose={() => setOpened(null)} />
       )}
     </main>
   )

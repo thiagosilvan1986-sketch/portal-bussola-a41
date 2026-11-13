@@ -131,7 +131,7 @@ describe('versão do app', () => {
     const known = new Set(VERSIONS.map((v) => v.version))
     for (const f of FEATURES) expect(known.has(f.version), f.title).toBe(true)
     expect(CURRENT_VERSION).toEqual(VERSIONS[VERSIONS.length - 1])
-    expect(CURRENT_VERSION.version).toBe('1.16')
+    expect(CURRENT_VERSION.version).toBe('1.17')
     // números em ordem e sem repetir
     const nums = VERSIONS.map((v) => Number(v.version.split('.')[1]))
     expect(nums).toEqual(nums.map((_, i) => i))
@@ -143,7 +143,7 @@ describe('versão do app', () => {
         <AppRoutes />
       </MemoryRouter>,
     )
-    expect(screen.getByText('Versão 1.16 · atualizado em 13/11/2026')).toBeTruthy()
+    expect(screen.getByText('Versão 1.17 · atualizado em 13/11/2026')).toBeTruthy()
     const item = screen.getByText('Ordene como preferir').closest('li')!
     expect(item.textContent).toContain('Atualizado na versão 1.11 · 12/11/2026')
   })

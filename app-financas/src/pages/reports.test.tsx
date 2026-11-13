@@ -306,9 +306,9 @@ describe('Relatórios', () => {
     // o dia tocado mostra as contas dele, com a data (o período tem 3 meses)
     const items = within(map).getByRole('list', { name: 'Vencimentos do dia 10' })
     expect(within(items).getAllByRole('listitem').map((li) => flat(li.textContent))).toEqual([
-      '10/10 · AluguelR$ 1.000,00',
-      '10/11 · AluguelR$ 1.000,00',
-      '10/12 · AluguelR$ 1.000,00',
+      '10/10 · AluguelR$ 1.000,00✓ PagaVer detalhes ›',
+      '10/11 · AluguelR$ 1.000,00⚠ AtrasadaVer detalhes ›',
+      '10/12 · AluguelR$ 1.000,00○ PrevistaVer detalhes ›',
     ])
     // lista: Detalhado (padrão) traz conta por conta; Consolidado, um total por dia
     const list = map.querySelector('.heat-list') as HTMLElement
@@ -318,6 +318,47 @@ describe('Relatórios', () => {
     fireEvent.click(within(modes).getByRole('button', { name: 'Consolidado' }))
     expect(list.querySelector('.heat-detail')).toBeNull()
     expect(list.querySelectorAll('ul > li')).toHaveLength(2)
+  })
+
+  it('no mapa, tocar numa conta lançada abre a folha de detalhe com pagamento e Editar conta', () => {
+    renderReports()
+    const map = screen.getByRole('region', { name: 'Mapa de vencimentos' })
+    fireEvent.click(within(map).getByRole('button', { name: /^Dia 10: / }))
+    const items = within(map).getByRole('list', { name: 'Vencimentos do dia 10' })
+    fireEvent.click(within(items).getByRole('button', { name: /^Aluguel, R\$.1\.000,00, Atrasada/ }))
+    const sheet = screen.getByRole('dialog', { name: 'Aluguel' })
+    expect(within(sheet).getByRole('button', { name: 'Marcar como paga' })).toBeTruthy()
+    expect(within(sheet).getByRole('link', { name: 'Editar conta' }).getAttribute('href')).toBe('/contas/b2')
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Fechar' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('no mapa, a conta de um mês ainda sem lançamento abre só a previsão', () => {
+    renderReports()
+    const map = screen.getByRole('region', { name: 'Mapa de vencimentos' })
+    fireEvent.click(within(map).getByRole('button', { name: /^Dia 10: / }))
+    const items = within(map).getByRole('list', { name: 'Vencimentos do dia 10' })
+    fireEvent.click(within(items).getByRole('button', { name: /^Aluguel, R\$.1\.000,00, Prevista/ }))
+    const sheet = screen.getByRole('dialog', { name: 'Aluguel' })
+    expect(flat(sheet.textContent)).toContain('Valor previsto')
+    expect(within(sheet).queryByRole('button', { name: 'Marcar como paga' })).toBeNull()
+    expect(within(sheet).getByRole('link', { name: 'Editar conta' }).getAttribute('href')).toBe('/contas/b2')
+  })
+
+  it('no mapa de A receber, a parcela mostra a situação e leva para a pessoa e para a compra', () => {
+    renderReports()
+    fireEvent.click(within(screen.getByRole('group', { name: 'O que mostrar' })).getByRole('button', { name: 'A receber' }))
+    const map = screen.getByRole('region', { name: 'Mapa de vencimentos' })
+    fireEvent.click(within(map).getByRole('button', { name: /^Dia 10: / }))
+    const items = within(map).getByRole('list', { name: 'Vencimentos do dia 10' })
+    const rows = within(items).getAllByRole('listitem').map((li) => flat(li.textContent))
+    expect(rows[0]).toContain('✓ Recebida')
+    expect(rows[1]).toContain('⚠ Atrasada')
+    fireEvent.click(within(items).getByRole('button', { name: /^Ana Souza · Tênis 2\/3, .*Atrasada/ }))
+    const sheet = screen.getByRole('dialog', { name: 'Ana Souza · Tênis 2/3' })
+    expect(flat(sheet.textContent)).toContain('Falta receber')
+    expect(within(sheet).getByRole('link', { name: 'Ver compra e registrar recebimento' }).getAttribute('href')).toBe('/receber/pessoa/p1')
+    expect(within(sheet).getByRole('link', { name: 'Editar compra' }).getAttribute('href')).toBe('/receber/compra/r1/editar')
   })
 
   it('o fluxo do dinheiro fecha os dois lados e escolher uma categoria nele abre as contas dela', () => {

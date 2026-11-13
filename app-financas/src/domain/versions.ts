@@ -22,6 +22,7 @@ export const VERSIONS: readonly { version: string; date: IsoDate; summary: strin
   { version: '1.14', date: '2026-11-13', summary: 'Versões no Sobre, nomes no mapa de vencimentos e agenda do celular' },
   { version: '1.15', date: '2026-11-13', summary: 'Agenda do celular no modo que deixa marcar o contato' },
   { version: '1.16', date: '2026-11-13', summary: 'Contatos por arquivo .vcf, um ou vários de uma vez, com o passo a passo na tela' },
+  { version: '1.17', date: '2026-11-13', summary: 'Mapa de vencimentos: situação do pagamento em cada conta e detalhe ao tocar' },
 ]
 
 export const CURRENT_VERSION = VERSIONS[VERSIONS.length - 1]

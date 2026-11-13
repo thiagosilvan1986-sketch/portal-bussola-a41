@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { payEntry, skipEntry, undoPayment, updateEntryDetails } from '../data/store'
 import { installmentLabel } from '../domain/bills'
 import { formatCompetence, formatDateBR } from '../domain/dates'
@@ -189,6 +190,11 @@ export function EntrySheet({ uid, entry, today, billExists = true, link = null, 
           />
         </section>
 
+        {billExists && (
+          <Link className="btn" to={`/contas/${entry.billId}`}>
+            Editar conta
+          </Link>
+        )}
         <button className="btn ghost" onClick={onClose}>
           Fechar
         </button>

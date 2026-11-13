@@ -1,8 +1,8 @@
 import { missingEntries } from './bills'
 import { addMonths, competenceOf } from './dates'
-import { amountDue, isPending, remainingCents } from './entries'
-import { installmentRemaining, isSettled } from './receivables'
-import type { Bill, Competence, Entry, IsoDate, Person, Receivable, ReceivableKind } from './types'
+import { amountDue, displayStatus, isPending, remainingCents } from './entries'
+import { installmentRemaining, installmentStatus, isSettled } from './receivables'
+import type { Bill, Competence, DisplayStatus, Entry, IsoDate, Person, Receivable, ReceivableKind } from './types'
 
 /* ---------- Períodos ---------- */
 
@@ -338,11 +338,26 @@ export function firstShortfall(rows: MonthReport[], series: number[]): Competenc
 
 /* ---------- Mapa de vencimentos ---------- */
 
-/** Um vencimento do dia: a conta (ou a parcela a receber), a data e o valor. */
+/** Um vencimento do dia: a conta (ou a parcela a receber), a data, o valor e a situação do pagamento. */
 export interface DueItem {
   name: string
   dueDate: IsoDate
   cents: number
+  /** conta = a pagar; parcela = a receber. */
+  kind: 'conta' | 'parcela'
+  /** Paga, Parcial, Atrasada, Vence em breve… (a mesma das outras telas). */
+  status: DisplayStatus
+  /** Quanto ainda falta pagar (conta) ou receber (parcela). Zero = quitado. */
+  pendingCents: number
+  /** Conta: id do lançamento do mês (`${billId}_${competence}`) e da conta. */
+  entryId?: string
+  billId?: string
+  /** true = o mês ainda não tem lançamento; o valor vem da previsão da conta e não dá para registrar pagamento. */
+  projected?: boolean
+  /** Parcela: quem deve, a compra e o número da parcela. */
+  personId?: string
+  receivableId?: string
+  installmentNumber?: number
 }
 
 export interface DueDay {
@@ -350,8 +365,24 @@ export interface DueDay {
   day: number
   totalCents: number
   count: number
+  /** Quanto do dia ainda está pendente (a pagar ou a receber). */
+  pendingCents: number
+  /** Quantos vencimentos do dia ainda estão pendentes. */
+  pendingCount: number
+  /** Quantos deles já passaram do vencimento. */
+  overdueCount: number
   /** Cada vencimento do dia, em ordem de data e depois de nome. */
   items: DueItem[]
+}
+
+export interface DueDayOptions {
+  /** Hoje, para saber o que está atrasado. Sem ela, nada é marcado como atrasado. */
+  today?: IsoDate
+  /**
+   * Lançamentos como foram gravados (antes de descontar reembolsos): a situação sai deles, e o que não está
+   * aqui é previsão. Sem isto, todo lançamento é tratado como gravado.
+   */
+  recorded?: ReadonlyMap<string, Entry>
 }
 
 /**
@@ -364,19 +395,49 @@ export function dueDayMap(
   months: Competence[],
   scope: 'pagar' | 'receber',
   people: readonly Person[] = [],
+  options: DueDayOptions = {},
 ): DueDay[] {
   const inRange = new Set(months)
-  const days: DueDay[] = Array.from({ length: 31 }, (_, k) => ({ day: k + 1, totalCents: 0, count: 0, items: [] }))
-  const add = (dueDate: IsoDate, cents: number, name: string) => {
-    if (cents <= 0) return
-    const slot = days[Number(dueDate.slice(8, 10)) - 1]
+  const today = options.today ?? '0000-00-00'
+  const days: DueDay[] = Array.from({ length: 31 }, (_, k) => ({
+    day: k + 1,
+    totalCents: 0,
+    count: 0,
+    pendingCents: 0,
+    pendingCount: 0,
+    overdueCount: 0,
+    items: [],
+  }))
+  const add = (item: DueItem) => {
+    if (item.cents <= 0) return
+    const slot = days[Number(item.dueDate.slice(8, 10)) - 1]
     if (!slot) return
-    slot.totalCents += cents
+    slot.totalCents += item.cents
     slot.count += 1
-    slot.items.push({ name, dueDate, cents })
+    if (item.pendingCents > 0) {
+      slot.pendingCents += item.pendingCents
+      slot.pendingCount += 1
+      if (item.status === 'atrasada') slot.overdueCount += 1
+    }
+    slot.items.push(item)
   }
   if (scope === 'pagar') {
-    for (const e of entries) if (inRange.has(e.competence)) add(e.dueDate, amountDue(e), e.billName)
+    for (const e of entries)
+      if (inRange.has(e.competence)) {
+        const recorded = options.recorded ? options.recorded.get(e.id) : e
+        add({
+          name: e.billName,
+          dueDate: e.dueDate,
+          cents: amountDue(e),
+          kind: 'conta',
+          // A situação vem do lançamento gravado: o valor do mapa pode estar descontado dos reembolsos.
+          status: displayStatus(recorded ?? e, today),
+          pendingCents: isPending(e) ? remainingCents(e) : 0,
+          entryId: e.id,
+          billId: e.billId,
+          projected: recorded === undefined,
+        })
+      }
   } else {
     const who = new Map(people.map((p) => [p.id, p.name]))
     for (const r of receivables)
@@ -384,7 +445,17 @@ export function dueDayMap(
         if (inRange.has(competenceOf(i.dueDate))) {
           const parcel = r.installmentCount > 1 ? ` ${i.number}/${r.installmentCount}` : ''
           const person = who.get(r.personId)
-          add(i.dueDate, i.amountCents, `${person ? `${person} · ` : ''}${r.description}${parcel}`)
+          add({
+            name: `${person ? `${person} · ` : ''}${r.description}${parcel}`,
+            dueDate: i.dueDate,
+            cents: i.amountCents,
+            kind: 'parcela',
+            status: installmentStatus(i, today),
+            pendingCents: isSettled(i) ? 0 : installmentRemaining(i),
+            personId: r.personId,
+            receivableId: r.id,
+            installmentNumber: i.number,
+          })
         }
   }
   for (const d of days) d.items.sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.name.localeCompare(b.name, 'pt-BR'))

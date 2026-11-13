@@ -2311,12 +2311,54 @@ ul.heat-items {
   padding: 0;
 }
 ul.heat-items > li {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 0;
+  display: block;
+  padding: 0;
   border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
+}
+/* Cada conta do mapa: nome e valor na primeira linha; situação do pagamento e "Ver detalhes" na segunda. */
+.heat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+button.heat-item {
+  cursor: pointer;
+  min-height: 44px;
+}
+button.heat-item:focus-visible {
+  outline: 2px solid var(--primary-ink);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.heat-item-main,
+.heat-item-sub {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.heat-item-main > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.heat-item .status-chip {
+  font-size: 0.75rem;
+  padding: 1px 8px;
+}
+.heat-open {
+  color: var(--primary-ink);
+  font-size: 0.8rem;
+  font-weight: 650;
+  white-space: nowrap;
 }
 .heat-detail > li {
   display: block;
@@ -2324,6 +2366,9 @@ ul.heat-items > li {
 .heat-list .heat-detail ul.heat-items > li {
   padding-left: 12px;
   border-bottom: 0;
+}
+.heat-list .heat-detail .heat-item {
+  padding: 6px 0;
 }
 .heat-day-head {
   display: flex;

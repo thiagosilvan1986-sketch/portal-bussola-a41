@@ -109,9 +109,9 @@ describe('mapa de vencimentos', () => {
     const map = dueDayMap(entries, [], months, 'pagar')
     expect(map).toHaveLength(31)
     expect(map[4]).toMatchObject({ day: 5, totalCents: 40000, count: 2 })
-    expect(map[4].items).toEqual([
-      { name: 'Energia', dueDate: '2026-10-05', cents: 20000 },
-      { name: 'Energia', dueDate: '2026-11-05', cents: 20000 },
+    expect(map[4].items.map((i) => [i.name, i.dueDate, i.cents])).toEqual([
+      ['Energia', '2026-10-05', 20000],
+      ['Energia', '2026-11-05', 20000],
     ])
     expect(map[9]).toMatchObject({ day: 10, totalCents: 100000, count: 1 })
     expect(map[19].count).toBe(0)
@@ -122,6 +122,60 @@ describe('mapa de vencimentos', () => {
     expect(map[11]).toMatchObject({ day: 12, totalCents: 20000, count: 2 })
     expect(map[11].items.map((i) => i.name)).toEqual(['Ana · r1 1/3', 'Ana · r1 2/3'])
     expect(map.filter((d) => d.count > 0)).toHaveLength(1)
+  })
+
+  it('cada vencimento traz a situação do pagamento e quanto falta pagar', () => {
+    const list = [
+      entry(bill({ id: 'a', dueDay: 5 }), '2026-10', { paidAt: '2026-10-05', paidAmountCents: 20000 }), // paga
+      entry(bill({ id: 'b', dueDay: 5 }), '2026-10', { paidAt: '2026-10-05', paidAmountCents: 5000 }), // parcial
+      entry(bill({ id: 'c', dueDay: 5 }), '2026-11'), // venceu antes de hoje (11/11): atrasada
+      entry(bill({ id: 'd', dueDay: 5 }), '2026-12'), // futura: pendente, ainda sem aviso de atraso
+    ]
+    const items = dueDayMap(list, [], ['2026-10', '2026-11', '2026-12'], 'pagar', [], { today: TODAY }).flatMap((d) => d.items)
+    expect(items.map((i) => [i.billId, i.status, i.pendingCents])).toEqual([
+      ['a', 'paga', 0],
+      ['b', 'parcial', 15000],
+      ['c', 'atrasada', 20000],
+      ['d', 'prevista', 20000],
+    ])
+    expect(items[2]).toMatchObject({ kind: 'conta', entryId: 'c_2026-11', projected: false })
+  })
+
+  it('resume o dia: quantos vencimentos ainda estão pendentes e quantos atrasados', () => {
+    const list = [
+      entry(bill({ id: 'a', dueDay: 5 }), '2026-10', { paidAt: '2026-10-05', paidAmountCents: 20000 }),
+      entry(bill({ id: 'b', dueDay: 5 }), '2026-11'),
+      entry(bill({ id: 'c', dueDay: 5 }), '2026-12'),
+    ]
+    const day = dueDayMap(list, [], ['2026-10', '2026-11', '2026-12'], 'pagar', [], { today: TODAY })[4]
+    expect(day).toMatchObject({ count: 3, totalCents: 60000, pendingCount: 2, pendingCents: 40000, overdueCount: 1 })
+  })
+
+  it('a situação vem do lançamento gravado e o que não está gravado é previsão', () => {
+    const gravado = entry(bill({ id: 'a', dueDay: 5 }), '2026-11', { paidAt: '2026-11-05', paidAmountCents: 20000 })
+    const previsto = entry(bill({ id: 'b', dueDay: 5 }), '2026-12')
+    // o valor do mapa pode vir descontado dos reembolsos (aqui, sem o pagamento); a situação não muda por isso
+    const descontado = { ...gravado, paidAt: null, paidAmountCents: null }
+    const items = dueDayMap([descontado, previsto], [], ['2026-11', '2026-12'], 'pagar', [], {
+      today: TODAY,
+      recorded: new Map([[gravado.id, gravado]]),
+    }).flatMap((d) => d.items)
+    expect(items.map((i) => [i.billId, i.status, i.projected])).toEqual([
+      ['a', 'paga', false],
+      ['b', 'prevista', true],
+    ])
+  })
+
+  it('a parcela a receber traz a situação, a pessoa e a compra para abrir', () => {
+    const r = recv('r1', 30000, '2026-10-12', 3)
+    r.installments = r.installments.map((i) => (i.number === 1 ? { ...i, paidAt: '2026-10-12', paidAmountCents: i.amountCents } : i))
+    const items = dueDayMap([], [r], ['2026-10', '2026-11', '2026-12'], 'receber', [], { today: TODAY }).flatMap((d) => d.items)
+    expect(items.map((i) => [i.installmentNumber, i.status, i.pendingCents])).toEqual([
+      [1, 'paga', 0],
+      [2, 'vence_em_breve', 10000], // vence amanhã (12/11)
+      [3, 'prevista', 10000],
+    ])
+    expect(items[1]).toMatchObject({ kind: 'parcela', personId: 'p1', receivableId: 'r1' })
   })
 
   it('classifica o dia em níveis de 0 a 5 pela proporção do dia mais carregado', () => {
