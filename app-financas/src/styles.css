@@ -1968,6 +1968,16 @@ td.balance-neg {
   font-size: 0.95rem;
   overflow-wrap: anywhere;
 }
+/* Nome da categoria no centro: cabe no miolo da rosquinha (até 2 linhas), sem encostar no anel. */
+.donut-center > span:first-child {
+  max-width: calc(100% + 32px);
+  margin: 0 -16px;
+  font-size: 0.75rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 button.cat-row {
   display: flex;
   flex-direction: column;

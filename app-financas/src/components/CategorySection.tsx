@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMoney } from '../data/privacy'
 import { useSortChoice } from '../data/sortPrefs'
@@ -49,6 +50,9 @@ export function CategorySection({ slices, entries, months, today, category, onSe
   const money = useMoney()
   const total = slices.reduce((acc, s) => acc + s.totalCents, 0)
   const active = sliceOf(slices, category)
+  // Fatia sob o mouse (ou com o foco do teclado): o centro mostra o nome dela sem precisar clicar.
+  const [hovered, setHovered] = useState<string | null>(null)
+  const shown = (hovered ? slices.find((s) => s.category === hovered) : null) ?? active
   const members = category === null ? [] : category === OTHER_CATEGORIES ? (slices.find((s) => s.category === OTHER_CATEGORIES)?.members ?? []) : [category]
   const maxShare = Math.max(...slices.map((s) => s.totalCents), 1)
   // A ordem da lista é escolha da pessoa; a rosquinha e as cores seguem sempre o tamanho de cada categoria.
@@ -77,17 +81,18 @@ export function CategorySection({ slices, entries, months, today, category, onSe
         <svg className="donut-svg" viewBox={`0 0 ${SIZE} ${SIZE}`} role="group" aria-label="Rosquinha das contas a pagar por categoria">
           {arcs.map(({ slice, draw, at }) => {
             const isActive = active?.category === slice.category
-            const dim = active !== null && !isActive
+            const isHovered = hovered === slice.category
+            const dim = active !== null && !isActive && !isHovered
             return (
               <circle
                 key={slice.category}
-                className={`donut-arc${isActive ? ' active' : ''}${dim ? ' dim' : ''}`}
+                className={`donut-arc${isActive ? ' active' : ''}${isHovered ? ' hovered' : ''}${dim ? ' dim' : ''}`}
                 cx={SIZE / 2}
                 cy={SIZE / 2}
                 r={R}
                 fill="none"
                 stroke={sliceColor(slice.slot)}
-                strokeWidth={isActive ? STROKE + 6 : STROKE}
+                strokeWidth={isActive ? STROKE + 6 : isHovered ? STROKE + 4 : STROKE}
                 strokeDasharray={`${draw} ${CIRC - draw}`}
                 strokeDashoffset={-at}
                 transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
@@ -97,6 +102,10 @@ export function CategorySection({ slices, entries, months, today, category, onSe
                 aria-pressed={isActive}
                 aria-label={`${slice.category}: ${money(slice.totalCents)}, ${slice.share}% das contas a pagar`}
                 onClick={() => toggle(slice.category)}
+                onPointerEnter={(ev) => ev.pointerType === 'mouse' && setHovered(slice.category)}
+                onPointerLeave={() => setHovered(null)}
+                onFocus={() => setHovered(slice.category)}
+                onBlur={() => setHovered(null)}
                 onKeyDown={(ev) => {
                   if (ev.key === 'Enter' || ev.key === ' ') {
                     ev.preventDefault()
@@ -108,9 +117,9 @@ export function CategorySection({ slices, entries, months, today, category, onSe
           })}
         </svg>
         <div className="donut-center" aria-hidden="true">
-          <span className="muted">{active ? active.category : totalLabel}</span>
-          <strong>{money(active ? active.totalCents : total)}</strong>
-          {active && <span className="muted">{active.share}% do total</span>}
+          <span className="muted">{shown ? shown.category : totalLabel}</span>
+          <strong>{money(shown ? shown.totalCents : total)}</strong>
+          {shown && <span className="muted">{shown.share}% do total</span>}
         </div>
       </div>
 

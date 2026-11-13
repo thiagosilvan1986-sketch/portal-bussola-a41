@@ -42,7 +42,7 @@ export const FEATURES: { icon: string; title: string; text: string; version: str
   {
     icon: 'M5 20V10m7 10V4m7 16v-7',
     title: 'Dashboards interativos para tomada de decisões',
-    version: '1.17',
+    version: '1.19',
     text: 'Mês, trimestre, semestre ou ano, com gráficos que você explora com o dedo: mês a mês em barras ou acumulado, rosquinha por categoria, fluxo do dinheiro, mapa de vencimentos e comparação com o período anterior. No mapa, cada conta mostra se está paga, pendente ou atrasada e, ao tocar, abre o detalhe para registrar o pagamento. Filtre por A pagar, A receber ou categoria.',
   },
   {

@@ -293,6 +293,24 @@ describe('Relatórios', () => {
     expect(document.querySelector('.chart-tip')).toBeNull()
   })
 
+  it('na rosquinha, passar o mouse numa fatia mostra a categoria no centro; tirar o mouse volta ao total', () => {
+    renderReports()
+    const donut = screen.getByRole('region', { name: 'Contas a pagar por categoria' })
+    const center = () => flat(donut.querySelector('.donut-center')!.textContent)
+    expect(center()).toContain('Total a pagar')
+    const moradia = within(donut).getByRole('button', { name: /^Moradia: / })
+    fireEvent.pointerEnter(moradia, { pointerType: 'mouse' })
+    expect(center()).toContain('Moradia')
+    expect(center()).toContain('R$ 3.000,00')
+    expect(center()).toMatch(/\d+% do total/)
+    expect(moradia.getAttribute('aria-pressed')).toBe('false') // só mostra; não filtra
+    fireEvent.pointerLeave(moradia, { pointerType: 'mouse' })
+    expect(center()).toContain('Total a pagar')
+    // no toque (celular) nada muda ao encostar: vale o toque, como antes
+    fireEvent.pointerEnter(moradia, { pointerType: 'touch' })
+    expect(center()).toContain('Total a pagar')
+  })
+
   it('o mapa de vencimentos soma o que vence em cada dia e lista os dias com conta', () => {
     renderReports()
     const map = screen.getByRole('region', { name: 'Mapa de vencimentos' })
