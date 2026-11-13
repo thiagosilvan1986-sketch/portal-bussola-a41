@@ -1,20 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { contactFromPicker, parseVCards } from './contacts'
-
-describe('contato do seletor do celular', () => {
-  it('pega o primeiro nome, telefone e e-mail e formata o telefone', () => {
-    expect(contactFromPicker({ name: ['Ana Souza'], tel: ['+55 11 98765-4321', '1133334444'], email: ['ana@exemplo.com'] })).toEqual({
-      name: 'Ana Souza',
-      phone: '(11) 98765-4321',
-      email: 'ana@exemplo.com',
-    })
-  })
-
-  it('campos que faltam ficam vazios', () => {
-    expect(contactFromPicker({ name: ['Bruno'] })).toEqual({ name: 'Bruno', phone: '', email: '' })
-    expect(contactFromPicker({})).toEqual({ name: '', phone: '', email: '' })
-  })
-})
+import { parseVCards } from './contacts'
 
 describe('arquivo .vcf', () => {
   const iphone = [

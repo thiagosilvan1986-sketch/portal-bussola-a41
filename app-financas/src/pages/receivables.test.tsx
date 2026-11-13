@@ -666,16 +666,12 @@ describe('Contato da agenda', () => {
     fireEvent.change(screen.getByLabelText('Arquivo de contato (.vcf)'), { target: { files: [vcf(text)] } })
   const field = (label: string | RegExp) => screen.getByLabelText(label) as HTMLInputElement
 
-  afterEach(() => {
-    delete (navigator as unknown as { contacts?: unknown }).contacts
-    delete (window as unknown as { ContactsManager?: unknown }).ContactsManager
-  })
-
-  it('pessoa nova: importar um arquivo .vcf preenche nome, telefone e e-mail, e o iPhone recebe o passo a passo', async () => {
+  it('pessoa nova: importar um arquivo .vcf preenche nome, telefone e e-mail, com o passo a passo na tela', async () => {
     setData([], [])
     renderAt('/receber/nova')
     expect(screen.queryByRole('button', { name: 'Escolher da agenda do celular' })).toBeNull()
-    expect(screen.getByText(/No iPhone: abra o contato/)).toBeTruthy()
+    expect(screen.getByText('Como importar da agenda do celular')).toBeTruthy()
+    expect(screen.getByText(/escolha Arquivo vCard \(\.vcf\)/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Importar contato (.vcf)' })).toBeTruthy()
 
     upload(cartao)
@@ -703,31 +699,6 @@ describe('Contato da agenda', () => {
     upload(`${cartao}\nBEGIN:VCARD\nFN:Bruno\nEND:VCARD`)
     await waitFor(() => expect(field('Nome da pessoa').value).toBe('Ana Maria Souza'))
     expect(screen.getByRole('status').textContent).toContain('O arquivo tem 2 contatos; usei o primeiro')
-  })
-
-  it('no Android, o botão da agenda do celular abre o seletor e preenche os campos', async () => {
-    const select = vi.fn().mockResolvedValue([{ name: ['Bia Lima'], tel: ['11 91234-5678'], email: ['bia@exemplo.com'] }])
-    ;(navigator as unknown as { contacts: unknown }).contacts = { select }
-    ;(window as unknown as { ContactsManager: unknown }).ContactsManager = class {}
-    setData([], [])
-    renderAt('/receber/nova')
-    expect(screen.queryByText(/No iPhone: abra o contato/)).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
-    await waitFor(() => expect(field('Nome da pessoa').value).toBe('Bia Lima'))
-    expect(select).toHaveBeenCalledWith(['name', 'tel', 'email'], { multiple: true })
-    expect(field(/Telefone/).value).toBe('(11) 91234-5678')
-    expect(field(/E-mail/).value).toBe('bia@exemplo.com')
-  })
-
-  it('fechar o seletor sem escolher não muda os campos e explica o que fazer', async () => {
-    ;(navigator as unknown as { contacts: unknown }).contacts = { select: vi.fn().mockResolvedValue([]) }
-    ;(window as unknown as { ContactsManager: unknown }).ContactsManager = class {}
-    setData([], [])
-    renderAt('/receber/nova')
-    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
-    await waitFor(() => expect((navigator as unknown as { contacts: { select: ReturnType<typeof vi.fn> } }).contacts.select).toHaveBeenCalled())
-    expect(field('Nome da pessoa').value).toBe('')
-    expect((await screen.findByRole('alert')).textContent).toBe('Nenhum contato foi escolhido. Toque na caixinha do contato até aparecer a marca e depois em Concluído.')
   })
 
   it('na edição do contato da pessoa também dá para importar', async () => {

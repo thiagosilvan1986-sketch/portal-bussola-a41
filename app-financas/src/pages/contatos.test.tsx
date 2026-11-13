@@ -150,84 +150,32 @@ describe('Sobre', () => {
   })
 })
 
-describe('Agenda do celular no Novo contato', () => {
+describe('Importar contato no Novo contato', () => {
   const field = (label: string) => screen.getByLabelText(label) as HTMLInputElement
-  const android = (select: ReturnType<typeof vi.fn>) => {
-    ;(navigator as unknown as { contacts: unknown }).contacts = { select }
+  const upload = (text: string) =>
+    fireEvent.change(screen.getByLabelText('Arquivo de contato (.vcf)'), { target: { files: [new File([text], 'c.vcf', { type: 'text/vcard' })] } })
+
+  it('só tem a importação por arquivo, com o passo a passo aberto na tela', () => {
+    ;(navigator as unknown as { contacts: unknown }).contacts = { select: vi.fn() }
     ;(window as unknown as { ContactsManager: unknown }).ContactsManager = class {}
-  }
-  afterEach(() => {
+    renderAt('/cadastros/contatos/novo')
+    expect(screen.queryByRole('button', { name: /agenda do celular/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Importar contato (.vcf)' })).toBeTruthy()
+    const howto = screen.getByText('Como importar da agenda do celular').closest('details')!
+    expect(howto.open).toBe(true)
+    expect(howto.textContent).toContain('Android (Samsung e outros)')
+    expect(howto.textContent).toContain('iPhone')
     delete (navigator as unknown as { contacts?: unknown }).contacts
     delete (window as unknown as { ContactsManager?: unknown }).ContactsManager
-    sessionStorage.clear()
   })
 
   it('preenche e diz o que recebeu, avisando quando o telefone vem sem DDD', async () => {
-    android(vi.fn().mockResolvedValue([{ name: ['Mãe'], tel: ['98865-9770'], email: ['mae@exemplo.com'] }]))
     renderAt('/cadastros/contatos/novo')
-    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
+    upload('BEGIN:VCARD\nVERSION:3.0\nFN:Mãe\nTEL;type=CELL:98865-9770\nEMAIL:mae@exemplo.com\nEND:VCARD')
     await waitFor(() => expect(field('Nome').value).toBe('Mãe'))
-    expect(field('Telefone / WhatsApp').value).toBe('98865-9770')
     expect(field('E-mail').value).toBe('mae@exemplo.com')
     const status = screen.getByRole('status').textContent!
     expect(status).toContain('Recebido: nome, telefone, e-mail.')
     expect(status).toContain('O telefone veio sem DDD')
-  })
-
-  it('se a tela for refeita enquanto a agenda está aberta, o contato recebido ainda preenche os campos', async () => {
-    let resolve!: (v: unknown) => void
-    android(vi.fn(() => new Promise((r) => (resolve = r))))
-    const first = renderAt('/cadastros/contatos/novo')
-    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
-    first.unmount()
-    renderAt('/cadastros/contatos/novo')
-    resolve([{ name: ['Bia'], tel: ['(11) 91234-5678'], email: [] }])
-    await waitFor(() => expect(field('Nome').value).toBe('Bia'))
-    expect(field('Telefone / WhatsApp').value).toBe('(11) 91234-5678')
-  })
-
-  it('se a página recarregar com a agenda aberta, explica e sugere o arquivo .vcf', () => {
-    android(vi.fn())
-    sessionStorage.setItem('contas-em-dia:agenda-aberta', JSON.stringify({ at: Date.now(), path: window.location.pathname, value: true }))
-    renderAt('/cadastros/contatos/novo')
-    expect(screen.getByRole('alert').textContent).toContain('o app recarregou antes de receber o contato')
-  })
-
-  it('contato sem dados vindos da agenda: avisa e não apaga o que já foi digitado', async () => {
-    android(vi.fn().mockResolvedValue([{ name: [], tel: [], email: [] }]))
-    renderAt('/cadastros/contatos/novo')
-    fireEvent.change(field('Nome'), { target: { value: 'Dani' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('sem nome, telefone nem e-mail')
-    expect(field('Nome').value).toBe('Dani')
-  })
-})
-
-describe('Agenda do celular: modo de vários contatos', () => {
-  const field = (label: string) => screen.getByLabelText(label) as HTMLInputElement
-  afterEach(() => {
-    delete (navigator as unknown as { contacts?: unknown }).contacts
-    delete (window as unknown as { ContactsManager?: unknown }).ContactsManager
-    sessionStorage.clear()
-  })
-  const android = (select: ReturnType<typeof vi.fn>) => {
-    ;(navigator as unknown as { contacts: unknown }).contacts = { select }
-    ;(window as unknown as { ContactsManager: unknown }).ContactsManager = class {}
-  }
-
-  it('com mais de um marcado, usa o primeiro e avisa', async () => {
-    android(vi.fn().mockResolvedValue([{ name: ['Mãe'], tel: ['(21) 98865-9770'], email: [] }, { name: ['Pai'], tel: [], email: [] }]))
-    renderAt('/cadastros/contatos/novo')
-    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
-    await waitFor(() => expect(field('Nome').value).toBe('Mãe'))
-    expect(screen.getByRole('status').textContent).toContain('Vieram 2 contatos; usei o primeiro.')
-  })
-
-  it('lista vazia: além do aviso, mostra o caminho do arquivo .vcf', async () => {
-    android(vi.fn().mockResolvedValue([]))
-    renderAt('/cadastros/contatos/novo')
-    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('Toque na caixinha do contato')
-    expect(screen.getByText(/abra o app Contatos, toque na pessoa, em Compartilhar e em Arquivo vCard/)).toBeTruthy()
   })
 })

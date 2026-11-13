@@ -1,8 +1,8 @@
 import { formatPhone } from './receivables'
 
 /**
- * Contato vindo da agenda do celular (Android, pelo seletor de contatos do navegador) ou de um arquivo .vcf
- * (iPhone: Contatos > Compartilhar contato > Salvar em Arquivos). O app só lê o contato que a pessoa escolheu.
+ * Contato vindo de um arquivo .vcf exportado pelo app Contatos do celular (Android: Compartilhar > Arquivo vCard;
+ * iPhone: Compartilhar contato > Salvar em Arquivos). O app só lê o arquivo que a pessoa escolheu.
  */
 export interface ContactData {
   name: string
@@ -10,41 +10,6 @@ export interface ContactData {
   email: string
 }
 
-
-/* ---------- Seletor de contatos do celular ---------- */
-
-interface PickerContact {
-  name?: string[]
-  tel?: string[]
-  email?: string[]
-}
-
-interface ContactsManager {
-  select(properties: string[], options?: { multiple?: boolean }): Promise<PickerContact[]>
-}
-
-/** Só o Chrome no Android tem o seletor; no iPhone e no computador o caminho é o arquivo .vcf. */
-export function supportsContactPicker(): boolean {
-  return typeof navigator !== 'undefined' && 'contacts' in navigator && typeof window !== 'undefined' && 'ContactsManager' in window
-}
-
-export function contactFromPicker(raw: PickerContact): ContactData {
-  const name = (raw.name?.[0] ?? '').trim()
-  const tel = (raw.tel?.[0] ?? '').trim()
-  const email = (raw.email?.[0] ?? '').trim()
-  return { name, phone: tel ? formatPhone(tel) : '', email }
-}
-
-/**
- * Abre a agenda do celular. Devolve null se a pessoa fechou sem escolher, e quantos contatos vieram marcados.
- * Pede no modo de vários contatos: em alguns celulares (Samsung) o modo de um só não deixa marcar o contato e a
- * agenda devolve a lista vazia. Usa o primeiro marcado.
- */
-export async function pickPhoneContact(): Promise<{ contact: ContactData; picked: number } | null> {
-  const contacts = (navigator as unknown as { contacts: ContactsManager }).contacts
-  const picked = await contacts.select(['name', 'tel', 'email'], { multiple: true })
-  return picked.length === 0 ? null : { contact: contactFromPicker(picked[0]), picked: picked.length }
-}
 
 /* ---------- Arquivo .vcf (vCard) ---------- */
 
