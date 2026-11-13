@@ -165,7 +165,7 @@ describe('categorias', () => {
   it('lista as contas da categoria por vencimento e mostra a evolução mês a mês', () => {
     const list = categoryEntries(entries, months, ['F', 'G'])
     expect(list.map((e) => e.category)).toEqual(['F', 'G', 'F', 'G']) // out: F (dia 6), G (dia 7); nov: F, G
-    expect(list.map((e) => e.dueDate)).toEqual([...list.map((e) => e.dueDate)].sort())
+    expect(list.map((e) => e.dueDate)).toEqual(list.map((e) => e.dueDate).toSorted())
     expect(categoryTrend(entries, months, ['F', 'G'])).toEqual([50000, 50000])
     expect(categoryTrend(entries, ['2026-09', '2026-10'], ['A'])).toEqual([0, 80000])
   })

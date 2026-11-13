@@ -560,7 +560,7 @@ describe('Sobre', () => {
     expect(item).toBeTruthy()
     expect(item!.text).toMatch(/celular ou no navegador/)
     expect(item!.text).toMatch(/e-mail/)
-    expect(FEATURES).toHaveLength(16)
+    expect(FEATURES).toHaveLength(17)
   })
 
   it('lista a ordenação das listas, com o que dá para escolher e onde fica guardado', () => {

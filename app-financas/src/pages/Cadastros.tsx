@@ -2,6 +2,26 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useAlertSettings, useRegistry } from '../data/hooks'
 import { alertsSummary } from '../domain/alerts'
+import { FONT_SIZES, useFontSize } from '../data/fontSize'
+
+/** Tamanho da letra: vale para o app todo, só neste aparelho. */
+function FontSizePicker() {
+  const [size, choose] = useFontSize()
+  return (
+    <section className="stack" aria-labelledby="font-size-title">
+      <h2 id="font-size-title">Tamanho da letra</h2>
+      <div className="segmented" role="group" aria-label="Tamanho da letra">
+        {FONT_SIZES.map((o) => (
+          <button key={o.key} type="button" className={`font-size-${o.key}`} aria-pressed={o.key === size} onClick={() => choose(o.key)}>
+            {o.key === size && <span aria-hidden="true">✓ </span>}
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <p className="muted">Vale para o app todo e fica guardado neste aparelho.</p>
+    </section>
+  )
+}
 
 function HubLink({ to, title, text }: { to: string; title: string; text: string }) {
   return (
@@ -19,7 +39,7 @@ function HubLink({ to, title, text }: { to: string; title: string; text: string 
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-/** Cadastros: o que a pessoa personaliza (categorias, formas de pagamento, atalhos, fornecedores) e a troca de planilhas. */
+/** Cadastros: o que a pessoa personaliza (categorias, formas de pagamento, atalhos, fornecedores, tamanho da letra) e a troca de planilhas. */
 export default function Cadastros() {
   const { user } = useAuth()
   const { data: reg } = useRegistry(user!.uid)
@@ -43,6 +63,8 @@ export default function Cadastros() {
         />
         <HubLink to="/cadastros/alertas" title="Alertas de vencimento" text={alertsSummary(alerts)} />
       </section>
+
+      <FontSizePicker />
 
       <section className="stack" aria-label="Dados e conta">
         <h2>Dados e conta</h2>

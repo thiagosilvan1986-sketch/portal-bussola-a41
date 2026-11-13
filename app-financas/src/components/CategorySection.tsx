@@ -55,13 +55,13 @@ export function CategorySection({ slices, entries, months, today, category, onSe
   const [sliceSort, setSliceSort] = useSortChoice('relatorio-categorias', SLICE_SORTS, SLICE_SORT_DEFAULT)
   const listed = sortSlicesBy(slices, sliceSort)
 
-  let offset = 0
-  const arcs = slices.map((s) => {
-    const len = (s.totalCents / total) * CIRC
-    const arc = { slice: s, draw: Math.max(0.5, len - GAP), at: offset }
-    offset += len
-    return arc
-  })
+  // Cada fatia começa onde a anterior terminou.
+  const lengths = slices.map((s) => (s.totalCents / total) * CIRC)
+  const arcs = slices.map((s, i) => ({
+    slice: s,
+    draw: Math.max(0.5, lengths[i] - GAP),
+    at: lengths.slice(0, i).reduce((a, b) => a + b, 0),
+  }))
 
   function toggle(key: string) {
     if (category === key) onFilter(null)

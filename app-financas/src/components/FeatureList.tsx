@@ -65,6 +65,11 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
     text: 'Em cada lista, escolha o critério (vencimento, nome, valor…) e toque em Crescente ou Decrescente para inverter. O app guarda a sua escolha, tela por tela, neste aparelho.',
   },
   {
+    icon: 'M4 20 9 6l5 14M6 15h6M15 20l3-8 3 8M16 18h4',
+    title: 'Letra do tamanho certo',
+    text: 'Em Cadastros, escolha a letra Pequena, Média ou Grande. Vale para o app todo e fica guardada neste aparelho.',
+  },
+  {
     icon: 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
     title: 'Copiar e criar novo',
     text: 'Um toque cria outro cadastro igual, só para ajustar: conta, compra a receber, pessoa, atalho, categoria, forma de pagamento ou fornecedor.',
