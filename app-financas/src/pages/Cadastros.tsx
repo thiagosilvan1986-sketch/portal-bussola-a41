@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
-import { useAlertSettings, useRegistry } from '../data/hooks'
+import { useAlertSettings, usePeople, useRegistry } from '../data/hooks'
 import { alertsSummary } from '../domain/alerts'
 import { FONT_SIZES, useFontSize } from '../data/fontSize'
 
@@ -39,20 +39,21 @@ function HubLink({ to, title, text }: { to: string; title: string; text: string 
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
-/** Cadastros: o que a pessoa personaliza (categorias, formas de pagamento, atalhos, fornecedores, tamanho da letra) e a troca de planilhas. */
+/** Configurações (aba "Ajustes"): o que a pessoa personaliza (categorias, formas de pagamento, atalhos, fornecedores, contatos, alertas, tamanho da letra) e a troca de planilhas. */
 export default function Cadastros() {
   const { user } = useAuth()
   const { data: reg } = useRegistry(user!.uid)
   const { data: alerts } = useAlertSettings(user!.uid)
+  const { data: people } = usePeople(user!.uid)
   return (
     <main className="page">
       <header className="page-head">
-        <h1>Cadastros</h1>
+        <h1>Configurações</h1>
       </header>
 
       <section className="stack" aria-label="Pré-cadastros">
         <h2>Pré-cadastros</h2>
-        <p className="muted">Deixe o app do seu jeito: o que você cadastrar aqui aparece ao criar uma conta.</p>
+        <p className="muted hub-intro">Deixe o app do seu jeito: o que você cadastrar aqui aparece ao criar uma conta.</p>
         <HubLink to="/cadastros/categorias" title="Categorias" text={count(reg.categories.length, 'categoria', 'categorias')} />
         <HubLink to="/cadastros/pagamentos" title="Formas de pagamento" text={count(reg.payments.length, 'forma', 'formas')} />
         <HubLink to="/cadastros/atalhos" title="Atalhos de conta" text={count(reg.templates.length, 'atalho', 'atalhos')} />
@@ -61,6 +62,7 @@ export default function Cadastros() {
           title="Fornecedores"
           text={reg.suppliers.length === 0 ? 'Cadastro opcional' : count(reg.suppliers.length, 'fornecedor', 'fornecedores')}
         />
+        <HubLink to="/cadastros/contatos" title="Contatos" text={people.length === 0 ? 'Nenhum contato' : count(people.length, 'contato', 'contatos')} />
         <HubLink to="/cadastros/alertas" title="Alertas de vencimento" text={alertsSummary(alerts)} />
       </section>
 

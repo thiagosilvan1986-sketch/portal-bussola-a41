@@ -31,6 +31,7 @@ const hooks = vi.hoisted(() => ({
   usePushDevices: vi.fn(),
   useRegistry: vi.fn(),
   useEntriesRange: vi.fn(),
+  usePeople: vi.fn(() => ({ data: [], ready: true, error: null })),
 }))
 const store = vi.hoisted(() => ({ saveAlerts: vi.fn(), savePushDevice: vi.fn(), deletePushDevice: vi.fn() }))
 const push = vi.hoisted(() => ({
@@ -101,7 +102,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('Cadastros: atalho para os alertas', () => {
+describe('Configurações: atalho para os alertas', () => {
   it('o menu mostra o resumo do que está escolhido e leva à tela', () => {
     setup({ settings: { enabled: true, days: [1, 3], hour: 9, push: true, email: false } })
     renderAt('/cadastros')

@@ -63,14 +63,17 @@ import Reports from './Reports'
 
 const live = <T,>(data: T[]) => ({ data, ready: true, error: null })
 
-function renderReports() {
-  return render(
+/** Abre os Relatórios. Os testes antigos foram escritos para o trimestre; o padrão agora é o mês. */
+function renderReports(kind: 'Mês' | 'Trimestre' = 'Trimestre') {
+  const result = render(
     <MemoryRouter>
       <PrivacyProvider>
         <Reports />
       </PrivacyProvider>
     </MemoryRouter>,
   )
+  if (kind !== 'Mês') fireEvent.click(within(screen.getByRole('group', { name: 'Tipo de período' })).getByRole('button', { name: kind }))
+  return result
 }
 
 beforeEach(() => {
@@ -464,5 +467,26 @@ describe('Relatórios: ordenação', () => {
     renderReports()
     expect(debtorNames()).toEqual(['Ana Souza', 'Bruno Lima'])
     expect(monthRows()[0]).toBe('dez*')
+  })
+})
+
+describe('relatório do mês', () => {
+  it('abre no mês atual, com o nome do mês, e consulta só aquele mês', () => {
+    renderReports('Mês')
+    const group = screen.getByRole('group', { name: 'Tipo de período' })
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['Mês', 'Trimestre', 'Semestre', 'Ano'])
+    expect(within(group).getByRole('button', { name: 'Mês' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('heading', { level: 2, name: 'Novembro de 2026' })).toBeTruthy()
+    expect(screen.queryByText('nov a nov')).toBeNull()
+    expect(hooks.useEntriesRange).toHaveBeenLastCalledWith('u1', '2026-11', '2026-11')
+  })
+
+  it('anda de mês em mês, atravessando o ano', () => {
+    renderReports('Mês')
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo período' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Dezembro de 2026' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Próximo período' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Janeiro de 2027' })).toBeTruthy()
+    expect(hooks.useEntriesRange).toHaveBeenLastCalledWith('u1', '2027-01', '2027-01')
   })
 })

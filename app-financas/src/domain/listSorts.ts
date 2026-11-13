@@ -245,3 +245,19 @@ export function sortTemplatesBy<T extends { name: string; amountCents: number; d
     dia: byNumber((t: T) => t.dueDay ?? 0, (t) => t.dueDay === null),
   })
 }
+
+/* ---------- Contatos (Configurações) ---------- */
+
+export type ContactSortKey = 'nome' | 'compras'
+export const CONTACT_SORTS: readonly SortOption<ContactSortKey>[] = [
+  { key: 'nome', label: 'Nome', dir: 'asc' },
+  { key: 'compras', label: 'Número de compras', dir: 'desc' },
+]
+export const CONTACT_SORT_DEFAULT = choiceOf(CONTACT_SORTS[0])
+
+export function sortContactsBy<T extends { name: string; purchases: number }>(items: readonly T[], choice: SortChoice<ContactSortKey>): T[] {
+  return sortItems(items, choice, {
+    nome: byText((c: T) => c.name),
+    compras: byNumber((c: T) => c.purchases),
+  })
+}

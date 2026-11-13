@@ -40,7 +40,7 @@ export function MainNav() {
       </NavLink>
       <NavLink to="/cadastros" className={link}>
         <Icon path={icons.registry} />
-        <span>Cadastros</span>
+        <span>Ajustes</span>
       </NavLink>
       <NavLink to="/sobre" className={link}>
         <Icon path={icons.about} />

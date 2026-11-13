@@ -83,7 +83,7 @@ const row = (name: string) => screen.getByText(name, { selector: '.row-title' })
 describe('menu Cadastros', () => {
   it('reúne os pré-cadastros e os dados (planilhas), sem Sair nem "Ver apresentação"', () => {
     renderAt('/cadastros')
-    expect(screen.getByRole('heading', { level: 1, name: 'Cadastros' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Configurações' })).toBeTruthy()
     const pre = within(screen.getByRole('region', { name: 'Pré-cadastros' }))
     expect(pre.getByRole('link', { name: /Categorias/ }).getAttribute('href')).toBe('/cadastros/categorias')
     expect(pre.getByRole('link', { name: /Formas de pagamento/ }).getAttribute('href')).toBe('/cadastros/pagamentos')
@@ -100,7 +100,7 @@ describe('menu Cadastros', () => {
 
   it('os endereços antigos de Ajustes continuam funcionando', () => {
     renderAt('/ajustes')
-    expect(screen.getByRole('heading', { level: 1, name: 'Cadastros' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Configurações' })).toBeTruthy()
     cleanup()
     renderAt('/ajustes/planilhas')
     expect(screen.getByRole('heading', { level: 1, name: 'Planilhas (CSV)' })).toBeTruthy()

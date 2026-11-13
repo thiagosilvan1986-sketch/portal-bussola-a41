@@ -53,7 +53,7 @@ const purchase = (id: string, personId: string, description: string, total: numb
   installments: buildInstallments(total, count, first),
   notes: '',
 })
-// Ana: atrasada (R$ 600). Carla: próxima parcela em 20/11 (R$ 100). Bruno: sem compras.
+// Ana: atrasada (R$ 600). Carla: próxima parcela em 20/11 (R$ 100). Bruno: sem compras (não aparece em A receber).
 const receivables = [
   purchase('r1', 'p1', 'Geladeira', 60000, '2026-10-05'),
   purchase('r2', 'p1', 'Bicicleta', 20000, '2026-12-10'),
@@ -219,7 +219,7 @@ describe('Ordenação em A receber', () => {
 
   it('abre pela situação (atrasados primeiro) e a situação não tem botão de sentido', () => {
     renderAt('/receber')
-    expect(titles()).toEqual(['Ana Souza', 'Carla Dias', 'Bruno Lima'])
+    expect(titles()).toEqual(['Ana Souza', 'Carla Dias'])
     const select = bar(GROUP).getByLabelText('Ordenar por') as HTMLSelectElement
     expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Situação (atrasados primeiro)', 'Nome', 'Valor a receber', 'Próximo vencimento'])
     expect(bar(GROUP).queryByRole('button')).toBeNull()
@@ -228,15 +228,15 @@ describe('Ordenação em A receber', () => {
   it('ordena por nome, valor a receber e próximo vencimento', () => {
     renderAt('/receber')
     pick(GROUP, 'Nome')
-    expect(titles()).toEqual(['Ana Souza', 'Bruno Lima', 'Carla Dias'])
+    expect(titles()).toEqual(['Ana Souza', 'Carla Dias'])
     fireEvent.click(dirButton(GROUP))
-    expect(titles()).toEqual(['Carla Dias', 'Bruno Lima', 'Ana Souza'])
+    expect(titles()).toEqual(['Carla Dias', 'Ana Souza'])
     pick(GROUP, 'Valor a receber')
-    expect(titles()).toEqual(['Ana Souza', 'Carla Dias', 'Bruno Lima'])
+    expect(titles()).toEqual(['Ana Souza', 'Carla Dias'])
     pick(GROUP, 'Próximo vencimento')
-    expect(titles()).toEqual(['Ana Souza', 'Carla Dias', 'Bruno Lima']) // Ana (05/10, atrasada), Carla (20/11), Bruno sem parcela
+    expect(titles()).toEqual(['Ana Souza', 'Carla Dias']) // Ana (05/10, atrasada), Carla (20/11)
     fireEvent.click(dirButton(GROUP))
-    expect(titles()).toEqual(['Carla Dias', 'Ana Souza', 'Bruno Lima']) // quem não tem parcela fica no fim
+    expect(titles()).toEqual(['Carla Dias', 'Ana Souza'])
   })
 
   it('a ordem escolhida fica guardada', () => {
@@ -245,7 +245,7 @@ describe('Ordenação em A receber', () => {
     fireEvent.click(dirButton(GROUP))
     first.unmount()
     renderAt('/receber')
-    expect(titles()).toEqual(['Carla Dias', 'Bruno Lima', 'Ana Souza'])
+    expect(titles()).toEqual(['Carla Dias', 'Ana Souza'])
   })
 })
 

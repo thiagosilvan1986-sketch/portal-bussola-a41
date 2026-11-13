@@ -38,13 +38,12 @@ export default function Receivables() {
   const people = usePeople(uid)
   const receivables = useReceivables(uid)
 
-  // Pessoas que têm compra deste tipo. Quem ainda não tem nenhuma compra fica na lista do cartão.
+  // Só as pessoas com compra deste tipo. Contatos sem nenhuma compra ficam em Configurações > Contatos.
   const [personSort, setPersonSort] = useSortChoice('receber', PERSON_SORTS, PERSON_SORT_DEFAULT)
   const rows = useMemo(() => {
-    const anyPurchase = new Set(receivables.data.map((r) => r.personId))
     const mine = ofKind(receivables.data, kind)
     const listed = people.data
-      .filter((p) => mine.some((r) => r.personId === p.id) || (kind === 'cartao' && !anyPurchase.has(p.id)))
+      .filter((p) => mine.some((r) => r.personId === p.id))
       .map((p) => ({ person: p, summary: summarizePerson(mine.filter((r) => r.personId === p.id), today) }))
     return sortPeopleBy(listed, personSort)
   }, [people.data, receivables.data, kind, today, personSort])

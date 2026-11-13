@@ -8,6 +8,8 @@ import AlertSettings from './pages/AlertSettings'
 import BillForm from './pages/BillForm'
 import Bills from './pages/Bills'
 import Cadastros from './pages/Cadastros'
+import ContactForm from './pages/ContactForm'
+import Contacts from './pages/Contacts'
 import Categories from './pages/Categories'
 import DataTransfer from './pages/DataTransfer'
 import Home from './pages/Home'
@@ -42,9 +44,13 @@ export function AppRoutes() {
       <Route path="/cadastros/atalhos/novo" element={<ShortcutForm />} />
       <Route path="/cadastros/atalhos/:id" element={<ShortcutForm />} />
       <Route path="/cadastros/fornecedores" element={<Suppliers />} />
+      <Route path="/cadastros/contatos" element={<Contacts />} />
+      <Route path="/cadastros/contatos/novo" element={<ContactForm />} />
+      <Route path="/cadastros/contatos/:id" element={<ContactForm />} />
       <Route path="/cadastros/alertas" element={<AlertSettings />} />
       <Route path="/cadastros/planilhas" element={<DataTransfer />} />
       <Route path="/sobre" element={<About />} />
+      <Route path="/configuracoes" element={<Navigate to="/cadastros" replace />} />
       {/* Endereços da época em que o menu se chamava Ajustes. */}
       <Route path="/ajustes" element={<Navigate to="/cadastros" replace />} />
       <Route path="/ajustes/planilhas" element={<Navigate to="/cadastros/planilhas" replace />} />

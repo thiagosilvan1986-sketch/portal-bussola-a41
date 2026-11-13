@@ -65,7 +65,7 @@ export default function Reports() {
   const { hidden } = usePrivacy()
   const uid = useAuth().user!.uid
   const today = useToday()
-  const [kind, setKind] = useState<PeriodKind>('trimestre')
+  const [kind, setKind] = useState<PeriodKind>('mes')
   const [offset, setOffset] = useState(0)
   const [scope, setScope] = useState<Scope>('tudo')
   const [category, setCategory] = useState<string | null>(null)
@@ -229,7 +229,7 @@ export default function Reports() {
         </button>
         <div className="month-title">
           <h2 aria-live="polite">{periodTitle(period)}</h2>
-          <span className="muted">{kind === 'ano' ? 'jan a dez' : periodSpan(period)}</span>
+          {kind !== 'mes' && <span className="muted">{kind === 'ano' ? 'jan a dez' : periodSpan(period)}</span>}
           {offset !== 0 && (
             <button type="button" className="back-pill" onClick={() => move(-offset)}>
               <span aria-hidden="true">↺</span> Voltar ao período atual

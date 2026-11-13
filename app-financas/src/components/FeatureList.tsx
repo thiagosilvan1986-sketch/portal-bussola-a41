@@ -7,7 +7,7 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
   {
     icon: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm0-11v4l2.500 1.500M5 3 2 6m17-3 3 3',
     title: 'Aviso antes de vencer',
-    text: 'Escolha com quantos dias de antecedência quer ser avisado (na véspera, 3 dias antes…) e a que horas. Receba por notificação no celular ou no navegador, mesmo com o app fechado, por e-mail, ou pelos dois: você liga e desliga cada um em Cadastros.',
+    text: 'Escolha com quantos dias de antecedência quer ser avisado (na véspera, 3 dias antes…) e a que horas. Receba por notificação no celular ou no navegador, mesmo com o app fechado, por e-mail, ou pelos dois: você liga e desliga cada um em Configurações.',
   },
   {
     icon: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zm-4-9 3 3 5-6',
@@ -32,7 +32,7 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
   {
     icon: 'M5 20V10m7 10V4m7 16v-7',
     title: 'Dashboards interativos para tomada de decisões',
-    text: 'Trimestre, semestre ou ano, com gráficos que você explora com o dedo: mês a mês em barras ou acumulado, rosquinha por categoria, fluxo do dinheiro, mapa de vencimentos e comparação com o período anterior. Filtre por A pagar, A receber ou categoria.',
+    text: 'Mês, trimestre, semestre ou ano, com gráficos que você explora com o dedo: mês a mês em barras ou acumulado, rosquinha por categoria, fluxo do dinheiro, mapa de vencimentos e comparação com o período anterior. Filtre por A pagar, A receber ou categoria.',
   },
   {
     icon: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM4 10h16M4 15h16M10 4v16',
@@ -57,7 +57,7 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
   {
     icon: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4.500v5M9 14.500v5',
     title: 'Do seu jeito',
-    text: 'Em Cadastros, crie e mude categorias, formas de pagamento, atalhos de conta e fornecedores. Renomear atualiza tudo o que já existe.',
+    text: 'Em Configurações (aba Ajustes), crie e mude categorias, formas de pagamento, atalhos de conta, fornecedores e contatos. Renomear atualiza tudo o que já existe.',
   },
   {
     icon: 'M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3',
@@ -67,7 +67,7 @@ export const FEATURES: { icon: string; title: string; text: string }[] = [
   {
     icon: 'M4 20 9 6l5 14M6 15h6M15 20l3-8 3 8M16 18h4',
     title: 'Letra do tamanho certo',
-    text: 'Em Cadastros, escolha a letra Pequena, Média ou Grande. Vale para o app todo e fica guardada neste aparelho.',
+    text: 'Em Configurações, escolha a letra Pequena, Média ou Grande. Vale para o app todo e fica guardada neste aparelho.',
   },
   {
     icon: 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1zM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',

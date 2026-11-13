@@ -6,23 +6,24 @@ import type { Bill, Competence, Entry, IsoDate, Person, Receivable, ReceivableKi
 
 /* ---------- Períodos ---------- */
 
-export type PeriodKind = 'trimestre' | 'semestre' | 'ano'
+export type PeriodKind = 'mes' | 'trimestre' | 'semestre' | 'ano'
 
-export const PERIOD_KINDS: PeriodKind[] = ['trimestre', 'semestre', 'ano']
+export const PERIOD_KINDS: PeriodKind[] = ['mes', 'trimestre', 'semestre', 'ano']
 
 export const PERIOD_LABEL: Record<PeriodKind, string> = {
+  mes: 'Mês',
   trimestre: 'Trimestre',
   semestre: 'Semestre',
   ano: 'Ano',
 }
 
 /** Meses em cada tipo de período. */
-export const PERIOD_MONTHS: Record<PeriodKind, number> = { trimestre: 3, semestre: 6, ano: 12 }
+export const PERIOD_MONTHS: Record<PeriodKind, number> = { mes: 1, trimestre: 3, semestre: 6, ano: 12 }
 
 export interface Period {
   kind: PeriodKind
   year: number
-  /** Posição dentro do ano, a partir de 1: trimestre 1–4, semestre 1–2, ano 1. */
+  /** Posição dentro do ano, a partir de 1: mês 1–12, trimestre 1–4, semestre 1–2, ano 1. */
   index: number
 }
 
@@ -58,9 +59,12 @@ export function samePeriod(a: Period, b: Period): boolean {
   return a.kind === b.kind && a.year === b.year && a.index === b.index
 }
 
-/** "3º trimestre de 2026", "2º semestre de 2026", "2026". */
+const MONTH_FULL = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+
+/** "Novembro de 2026", "3º trimestre de 2026", "2º semestre de 2026", "2026". */
 export function periodTitle(p: Period): string {
   if (p.kind === 'ano') return String(p.year)
+  if (p.kind === 'mes') return `${MONTH_FULL[p.index - 1]} de ${p.year}`
   return `${p.index}º ${p.kind} de ${p.year}`
 }
 
@@ -286,8 +290,9 @@ export const SCOPES: Scope[] = ['tudo', 'pagar', 'receber']
 
 export const SCOPE_LABEL: Record<Scope, string> = { tudo: 'Tudo', pagar: 'A pagar', receber: 'A receber' }
 
-/** "trimestre anterior", "semestre anterior", "ano anterior": o termo de comparação de cada tipo de período. */
+/** "mês anterior", "trimestre anterior", "semestre anterior", "ano anterior": o termo de comparação de cada tipo de período. */
 export const PREVIOUS_LABEL: Record<PeriodKind, string> = {
+  mes: 'mês anterior',
   trimestre: 'trimestre anterior',
   semestre: 'semestre anterior',
   ano: 'ano anterior',

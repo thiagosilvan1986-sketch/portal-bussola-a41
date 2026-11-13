@@ -38,7 +38,7 @@ describe('Cabeçalho do app', () => {
       ['A pagar', '/contas'],
       ['A receber', '/receber'],
       ['Relatórios', '/relatorios'],
-      ['Cadastros', '/cadastros'],
+      ['Ajustes', '/cadastros'],
       ['Sobre', '/sobre'],
     ])
     expect(within(nav).getByRole('link', { name: 'A receber' }).getAttribute('aria-current')).toBe('page')

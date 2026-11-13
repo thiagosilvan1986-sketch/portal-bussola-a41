@@ -95,10 +95,10 @@ describe('leitura e aplicação do tamanho', () => {
 describe('regras do CSS', () => {
   const css = readFileSync('src/styles.css', 'utf8')
 
-  it('Média é um pouco menor que antes, Grande é o tamanho de antes, e tudo em percentual', () => {
+  it('Pequena 12 px, Média 15 px e Grande 18 px, em percentual (sobre os 16 px do celular)', () => {
     expect(css).toMatch(/html \{\s*font-size: 93\.75%;/)
-    expect(css).toMatch(/html\[data-font-size='pequena'\] \{\s*font-size: 87\.5%;/)
-    expect(css).toMatch(/html\[data-font-size='grande'\] \{\s*font-size: 100%;/)
+    expect(css).toMatch(/html\[data-font-size='pequena'\] \{\s*font-size: 75%;/)
+    expect(css).toMatch(/html\[data-font-size='grande'\] \{\s*font-size: 112\.5%;/)
   })
 
   it('nenhum texto com tamanho fixo em px, para todo o app acompanhar a escolha', () => {

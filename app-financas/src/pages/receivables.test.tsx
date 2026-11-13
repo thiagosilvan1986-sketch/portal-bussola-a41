@@ -96,7 +96,8 @@ describe('lista A receber', () => {
     const row = screen.getByRole('link', { name: /Ana Souza/ })
     expect(row.textContent).toContain('2 parcelas atrasadas')
     expect(row.getAttribute('href')).toBe('/receber/pessoa/p1')
-    expect(screen.getByRole('link', { name: /Bruno Lima/ }).textContent).toContain('Sem compras')
+    // Bruno não tem nenhuma compra: fica só em Configurações > Contatos.
+    expect(screen.queryByRole('link', { name: /Bruno Lima/ })).toBeNull()
   })
 
   it('mostra o convite quando não há ninguém', () => {

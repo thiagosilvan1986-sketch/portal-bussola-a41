@@ -285,6 +285,12 @@ export function createReceivable(
   return { personId: personRef.id, receivableId: receivableRef.id, done: batch.commit() }
 }
 
+/** Cadastra um contato sem compra (Configurações > Contatos). Não espera o servidor; devolve o id na hora. */
+export function createPerson(uid: string, person: Data<Person>): { id: string; done: Promise<void> } {
+  const ref = doc(peopleCol(uid))
+  return { id: ref.id, done: setDoc(ref, person) }
+}
+
 export function updatePerson(uid: string, person: Person) {
   return setDoc(doc(peopleCol(uid), person.id), withoutId(person))
 }

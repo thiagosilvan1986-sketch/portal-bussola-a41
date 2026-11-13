@@ -71,15 +71,15 @@ body,
 }
 
 /* Tamanho da letra (Cadastros > Tamanho da letra). Tudo no app é medido em rem e acompanha. Em percentual, para
-   continuar respeitando o tamanho de letra configurado no próprio celular. Grande = o tamanho de antes. */
+   continuar respeitando o tamanho de letra configurado no próprio celular: Pequena 12 px, Média 15 px, Grande 18 px. */
 html {
   font-size: 93.75%;
 }
 html[data-font-size='pequena'] {
-  font-size: 87.5%;
+  font-size: 75%;
 }
 html[data-font-size='grande'] {
-  font-size: 100%;
+  font-size: 112.5%;
 }
 
 body {
@@ -338,6 +338,9 @@ a:focus-visible {
   text-decoration: none;
   color: var(--primary-ink);
   border-style: dashed;
+}
+.hub-intro {
+  margin: 0;
 }
 .hub-link {
   display: flex;
@@ -622,6 +625,13 @@ a:focus-visible {
 }
 .nav-link svg {
   flex: none;
+  /* Os ícones acompanham o tamanho da letra escolhido. */
+  width: 1.4em;
+  height: 1.4em;
+}
+.app-header-inner svg {
+  width: 1.45rem;
+  height: 1.45rem;
 }
 .nav-link.active {
   color: #ffffff;
