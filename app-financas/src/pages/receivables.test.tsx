@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { defaultRegistry } from '../domain/registry'
+import { extendRecurring } from '../domain/receivables'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildInstallments, withPayment } from '../domain/receivables'
@@ -35,7 +37,7 @@ const tenis = (): Receivable => ({
   notes: '',
 })
 
-const hooks = vi.hoisted(() => ({ useBills: vi.fn(), usePeople: vi.fn(), useReceivables: vi.fn(), useToday: vi.fn() }))
+const hooks = vi.hoisted(() => ({ useBills: vi.fn(), usePeople: vi.fn(), useReceivables: vi.fn(), useToday: vi.fn(), useRegistry: vi.fn() }))
 const store = vi.hoisted(() => ({
   createReceivable: vi.fn(),
   updateReceivable: vi.fn(),
@@ -49,6 +51,7 @@ const store = vi.hoisted(() => ({
 
 vi.mock('../auth', () => ({ useAuth: () => ({ user: { uid: 'u1', email: 'a@b.c' }, signOut: vi.fn() }) }))
 vi.mock('../data/hooks', () => hooks)
+hooks.useRegistry.mockReturnValue({ data: defaultRegistry(), ready: true, error: null })
 vi.mock('../data/store', () => store)
 
 import PersonPage from './PersonPage'
@@ -111,13 +114,13 @@ describe('lista A receber', () => {
     renderAt('/receber')
     // aba do cartão: Tênis (Ana) + Mochila (Bruno); o serviço da Ana não entra
     expect(flat(screen.getByText('Falta receber').parentElement!.textContent)).toContain('R$ 468,00')
-    expect(screen.getByRole('link', { name: /Reembolso do cartão/ }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: /^Cartão/ }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: /Bruno Lima/ })).toBeTruthy()
 
     cleanup()
     renderAt('/receber?aba=servicos')
     expect(flat(screen.getByText('Falta receber').parentElement!.textContent)).toContain('R$ 300,00')
-    expect(screen.getByRole('link', { name: /Serviços prestados/ }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: /^Serviços/ }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: /Ana Souza/ }).textContent).toContain('1 parcela atrasada')
     expect(screen.queryByRole('link', { name: /Bruno Lima/ })).toBeNull()
   })
@@ -132,8 +135,8 @@ describe('lista A receber', () => {
   it('mostra nas abas quantas parcelas estão atrasadas em cada tipo', () => {
     setData([ana], [tenis(), instalacao()])
     renderAt('/receber')
-    expect(screen.getByRole('link', { name: /Reembolso do cartão\s*2 em atraso/ })).toBeTruthy()
-    expect(screen.getByRole('link', { name: /Serviços prestados\s*1 em atraso/ })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /^Cartão\s*2 em atraso/ })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /^Serviços\s*1 em atraso/ })).toBeTruthy()
   })
 })
 
@@ -598,8 +601,8 @@ describe('Refere-se à conta a pagar', () => {
     notes: '',
     active: true,
   }
-  const energia: Bill = { ...fatura, id: 'b2', name: 'Energia' }
-  const campo = 'Refere-se à conta a pagar (opcional)'
+  const energia: Bill = { ...fatura, id: 'b2', name: 'Energia', paymentMethod: 'boleto' }
+  const campo = 'Refere-se à conta paga com cartão (opcional)'
   const live = <T,>(data: T[]) => ({ data, ready: true, error: null })
 
   beforeEach(() => {
@@ -609,7 +612,8 @@ describe('Refere-se à conta a pagar', () => {
   it('só aparece para reembolso do cartão e quando há contas cadastradas', () => {
     renderAt('/receber/nova?pessoa=p1')
     const select = screen.getByLabelText(campo) as HTMLSelectElement
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Nenhuma', 'Cartão Nubank', 'Energia'])
+    // só as contas pagas com cartão de crédito (Energia é boleto)
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Nenhuma', 'Cartão Nubank'])
     fireEvent.click(screen.getByRole('radio', { name: /Serviço prestado/ }))
     expect(screen.queryByLabelText(campo)).toBeNull()
     cleanup()
@@ -709,5 +713,75 @@ describe('Contato da agenda', () => {
     expect(field(/Telefone/).value).toBe('(11) 98765-4321')
     fireEvent.click(screen.getByRole('button', { name: 'Salvar contato' }))
     expect(store.updatePerson).toHaveBeenCalledWith('u1', expect.objectContaining({ id: 'p2', name: 'Ana Maria Souza', phone: '11987654321', email: 'ana.maria@exemplo.com' }))
+  })
+})
+
+describe('Rateio de conta', () => {
+  const aluguel: Bill = {
+    id: 'b1', name: 'Aluguel', category: 'Moradia', supplier: '', valueType: 'fixed', expectedAmountCents: 190800, dueDay: 10,
+    recurrence: 'monthly', startMonth: '2026-01', paymentMethod: 'pix', notes: '', active: true,
+  }
+  const live = <T,>(data: T[]) => ({ data, ready: true, error: null })
+  beforeEach(() => hooks.useBills.mockReturnValue(live([aluguel])))
+
+  it('tem aba própria na lista A receber, com o convite e o botão Novo rateio', () => {
+    setData([ana], [])
+    renderAt('/receber?aba=rateios')
+    expect(screen.getByRole('link', { name: 'Rateios' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByText('Nenhum rateio de conta')).toBeTruthy()
+    expect(screen.getAllByRole('link', { name: 'Novo rateio' })[0].getAttribute('href')).toBe('/receber/nova?tipo=rateio')
+  })
+
+  it('sem número de parcelas, grava um rateio sem fim ligado à conta, no dia dela', () => {
+    renderAt('/receber/nova?pessoa=p1&tipo=rateio')
+    expect(screen.getByRole('radio', { name: /Rateio de conta/ })).toHaveProperty('checked', true)
+    // conta é obrigatória
+    fireEvent.change(screen.getByLabelText(/Parte da pessoa por mês/), { target: { value: '954,00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(screen.getByRole('alert').textContent).toBe('Escolha a conta a pagar deste rateio.')
+    fireEvent.change(screen.getByLabelText('Conta a pagar dividida'), { target: { value: 'b1' } })
+    expect(screen.getByText(/Vence todo dia 10, junto com a conta/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Começa em'), { target: { value: '2026-10' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    const saved = store.createReceivable.mock.calls[0][1].receivable
+    expect(saved).toMatchObject({ kind: 'rateio', description: 'Aluguel', billId: 'b1', recurring: true, monthlyCents: 95400, endMonth: null, firstDueDate: '2026-10-10' })
+    // de outubro até o mês que vem (hoje é 09/11)
+    expect(saved.installments.map((i: { dueDate: string }) => i.dueDate)).toEqual(['2026-10-10', '2026-11-10', '2026-12-10'])
+    expect(saved).not.toHaveProperty('paymentMethod')
+  })
+
+  it('com número de parcelas, grava valor × parcelas', () => {
+    renderAt('/receber/nova?pessoa=p1&tipo=rateio')
+    fireEvent.change(screen.getByLabelText('Conta a pagar dividida'), { target: { value: 'b1' } })
+    fireEvent.change(screen.getByLabelText(/Parte da pessoa por mês/), { target: { value: '100,00' } })
+    fireEvent.change(screen.getByLabelText(/Nº de parcelas/), { target: { value: '6' } })
+    expect(screen.getByText(/6 × R\$.100,00, uma por mês/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Novo rateio de conta em 6x' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    const saved = store.createReceivable.mock.calls[0][1].receivable
+    expect(saved).toMatchObject({ recurring: false, installmentCount: 6, totalCents: 60000 })
+  })
+
+  it('na pessoa, o rateio sem fim mostra o valor por mês e cada parte pelo mês; editar permite encerrar', () => {
+    const r: Receivable = {
+      id: 'r5', personId: 'p1', kind: 'rateio', description: 'Parte da Ana no aluguel', totalCents: 0, installmentCount: 0,
+      firstDueDate: '2026-10-10', installments: [], notes: '', billId: 'b1', recurring: true, monthlyCents: 95400, endMonth: null,
+    }
+    // o app completa os meses ao ler (aqui, o teste entrega já completo, como o hook faz)
+    setData([ana], [extendRecurring(r, '2026-12')])
+    renderAt('/receber/pessoa/p1')
+    const card = screen.getByRole('region', { name: 'Parte da Ana no aluguel' })
+    expect(flat(card.textContent)).toContain('Todo mês, sem fim')
+    expect(flat(card.textContent)).toContain('R$ 954,00 /mês')
+    expect(flat(card.textContent)).toContain('Parte de out/2026')
+    expect(within(card).queryByRole('progressbar')).toBeNull()
+    cleanup()
+
+    renderAt('/receber/compra/r5/editar')
+    fireEvent.change(screen.getByLabelText('Último mês (para encerrar)'), { target: { value: '2026-11' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }))
+    const saved = store.updateReceivable.mock.calls[0][1]
+    expect(saved).toMatchObject({ endMonth: '2026-11', recurring: true })
+    expect(saved.installments.map((i: { dueDate: string }) => i.dueDate)).toEqual(['2026-10-10', '2026-11-10'])
   })
 })

@@ -10,7 +10,7 @@ import { StatusChip } from '../components/StatusChip'
 import { useBills, usePeople, useReceivables, useToday } from '../data/hooks'
 import { useSortChoice } from '../data/sortPrefs'
 import { deleteChargeLog, deletePerson, deleteReceivable, logCharge, setInstallmentPayment, updatePerson } from '../data/store'
-import { formatDateBR } from '../domain/dates'
+import { formatCompetence, formatDateBR } from '../domain/dates'
 import { PURCHASE_SORTS, PURCHASE_SORT_DEFAULT, sortPurchasesBy, type PurchaseSortKey } from '../domain/listSorts'
 import type { SortChoice } from '../domain/sorting'
 import { useMoney } from '../data/privacy'
@@ -24,12 +24,14 @@ import {
   formatPhone,
   installmentRemaining,
   installmentStatus,
+  isOpenEnded,
   isSettled,
   isValidEmail,
   isValidPhone,
   lastChargeText,
   listPath,
   ofKind,
+  parcelLabel,
   personTone,
   phoneDigits,
   summarizePerson,
@@ -420,26 +422,45 @@ function Purchase({
   const money = useMoney()
   const s = summarizeReceivable(receivable, today)
   const pct = s.count === 0 ? 0 : Math.round((s.settledCount / s.count) * 100)
+  const openEnded = isOpenEnded(receivable)
   return (
     <section className="card stack" aria-label={receivable.description}>
       <div className="sheet-head">
         <div>
           <h2>{receivable.description}</h2>
-          <p className="muted">
-            {s.settledCount} de {s.count} {s.count === 1 ? 'parcela recebida' : 'parcelas recebidas'}
-            {s.remainingCents > 0 ? ` · faltam ${money(s.remainingCents)}` : ' · quitada'}
-          </p>
+          {openEnded ? (
+            <p className="muted">
+              {receivable.endMonth ? `Encerrado em ${formatCompetence(receivable.endMonth)}` : 'Todo mês, sem fim'}
+              {s.remainingCents > 0 ? ` · faltam ${money(s.remainingCents)}` : ' · tudo recebido'}
+            </p>
+          ) : (
+            <p className="muted">
+              {s.settledCount} de {s.count} {s.count === 1 ? 'parcela recebida' : 'parcelas recebidas'}
+              {s.remainingCents > 0 ? ` · faltam ${money(s.remainingCents)}` : ' · quitada'}
+            </p>
+          )}
         </div>
-        <strong>{money(receivable.totalCents)}</strong>
+        <strong>
+          {openEnded ? (
+            <>
+              {money(receivable.monthlyCents ?? 0)}
+              <span className="muted small"> /mês</span>
+            </>
+          ) : (
+            money(receivable.totalCents)
+          )}
+        </strong>
       </div>
-      <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Parcelas recebidas">
-        <div className="progress-fill" style={{ width: `${pct}%` }} />
-      </div>
+      {!openEnded && (
+        <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Parcelas recebidas">
+          <div className="progress-fill" style={{ width: `${pct}%` }} />
+        </div>
+      )}
       {billName && <p className="muted">Refere-se à conta a pagar: {billName}</p>}
       {receivable.notes && <p className="muted">{receivable.notes}</p>}
 
       <details open={s.remainingCents > 0 && s.count <= 12}>
-        <summary>Parcelas</summary>
+        <summary>{openEnded ? 'Meses' : 'Parcelas'}</summary>
         <ul className="list parcels">
           {receivable.installments.map((i) => (
             <Parcel key={i.number} uid={uid} today={today} receivable={receivable} installment={i} />
@@ -471,7 +492,7 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
 
   const status = installmentStatus(i, today)
   const settled = isSettled(i)
-  const label = `Parcela ${i.number} de ${receivable.installmentCount}`
+  const label = parcelLabel(receivable, i)
 
   function quick() {
     setInstallmentPayment(uid, receivable, i.number, { paidAt: today, paidAmountCents: i.amountCents }).catch(log)
@@ -490,7 +511,15 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
   return (
     <li className={`row-card parcel status-${status}`}>
       <div className="row-main">
-        <span className="row-title">{label}</span>
+        <span className="row-title">
+          {isOpenEnded(receivable) ? (
+            <>
+              Parte de <span className="nowrap">{label.replace('Parte de ', '')}</span>
+            </>
+          ) : (
+            label
+          )}
+        </span>
         <span className="muted">
           Vence {formatDateBR(i.dueDate)}
           {i.paidAt ? ` · recebida em ${formatDateBR(i.paidAt)}` : ''}

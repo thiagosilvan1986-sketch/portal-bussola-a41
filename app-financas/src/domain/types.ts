@@ -95,8 +95,9 @@ export interface Installment {
  * O que a compra representa.
  * - cartao: compra ou parcelamento passado no nosso cartão para outra pessoa; o valor é só reembolso (cobre a fatura), não é receita.
  * - servico: serviço prestado; é dinheiro a receber de verdade.
+ * - rateio: a parte da pessoa numa conta a pagar dividida (aluguel, energia); sempre ligada à conta, todo mês.
  */
-export type ReceivableKind = 'cartao' | 'servico'
+export type ReceivableKind = 'cartao' | 'servico' | 'rateio'
 
 /** Compra parcelada para alguém (o que a pessoa nos deve). */
 export interface Receivable {
@@ -109,6 +110,15 @@ export interface Receivable {
   firstDueDate: IsoDate
   installments: Installment[]
   notes: string
-  /** Conta a pagar a que este reembolso se refere (opcional). Vazio ou ausente = sem ligação. */
+  /** Conta a pagar a que este reembolso se refere (opcional). Vazio ou ausente = sem ligação. No rateio, obrigatória. */
   billId?: string | null
+  /**
+   * Rateio sem número de parcelas: repete todo mês, com `monthlyCents`, até `endMonth` (vazio = sem fim).
+   * As parcelas gravadas são só as já geradas; o app acrescenta os meses seguintes ao ler (veja `extendRecurring`).
+   */
+  recurring?: boolean
+  /** Valor da parte da pessoa a cada mês (rateio). */
+  monthlyCents?: number
+  /** Último mês do rateio sem fim, quando ele for encerrado. */
+  endMonth?: Competence | null
 }

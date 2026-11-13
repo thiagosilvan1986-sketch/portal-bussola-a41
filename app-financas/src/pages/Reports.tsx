@@ -16,6 +16,7 @@ import { useSortChoice } from '../data/sortPrefs'
 import { withTransition } from '../data/transition'
 import { formatCompetence } from '../domain/dates'
 import { linkOfEntry, netOfReimbursements } from '../domain/linked'
+import { extendRecurring } from '../domain/receivables'
 import { DEBTOR_SORTS, DEBTOR_SORT_DEFAULT, MONTH_SORT_DEFAULT, monthSorts, sortDebtorsBy, sortMonthsBy } from '../domain/listSorts'
 import {
   OTHER_CATEGORIES,
@@ -87,7 +88,12 @@ export default function Reports() {
 
   const bills = useBills(uid)
   const people = usePeople(uid)
-  const receivables = useReceivables(uid)
+  const receivablesLive = useReceivables(uid)
+  // O rateio sem fim vem até o mês que vem; num período mais à frente, completa até o último mês do período.
+  const receivables = useMemo(
+    () => ({ ...receivablesLive, data: receivablesLive.data.map((r) => extendRecurring(r, to)) }),
+    [receivablesLive, to],
+  )
   // O período anterior vem primeiro; a consulta do período mostrado é sempre a última.
   const before = useEntriesRange(uid, previous[0], previous[previous.length - 1])
   const entries = useEntriesRange(uid, from, to)

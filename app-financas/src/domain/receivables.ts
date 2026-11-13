@@ -1,7 +1,9 @@
-import { addMonths, competenceOf, diffDays, dueDateFor, formatDateBR } from './dates'
+import { addMonths, competenceOf, diffDays, dueDateFor, formatCompetenceShort, formatDateBR } from './dates'
 import { DUE_SOON_DAYS } from './entries'
 import { formatBRL } from './money'
+import { simplify } from './text'
 import type {
+  Bill,
   ChargeChannel,
   ChargeLog,
   Competence,
@@ -16,24 +18,30 @@ import type {
 
 export const MAX_INSTALLMENTS = 60
 
-export const RECEIVABLE_KINDS: ReceivableKind[] = ['cartao', 'servico']
+export const RECEIVABLE_KINDS: ReceivableKind[] = ['cartao', 'servico', 'rateio']
 
 export const KIND_INFO: Record<ReceivableKind, { tab: string; title: string; hint: string; placeholder: string }> = {
   cartao: {
-    tab: 'Reembolso do cartão',
+    tab: 'Cartão',
     title: 'Reembolso do cartão',
     hint: 'Compra passada no seu cartão para outra pessoa. É só o reembolso: cobre a fatura e não é receita.',
     placeholder: 'Ex.: Tênis no cartão',
   },
   servico: {
-    tab: 'Serviços prestados',
+    tab: 'Serviços',
     title: 'Serviço prestado',
     hint: 'Serviço que você prestou e tem a receber de verdade.',
     placeholder: 'Ex.: Instalação de ar-condicionado',
   },
+  rateio: {
+    tab: 'Rateios',
+    title: 'Rateio de conta',
+    hint: 'A parte de outra pessoa numa conta que você paga (aluguel, energia). Fica ligada à conta e repete todo mês, com ou sem fim.',
+    placeholder: 'Ex.: Parte da Carol no aluguel',
+  },
 }
 
-const KIND_NOUN: Record<ReceivableKind, string> = { cartao: 'reembolso do cartão', servico: 'serviço prestado' }
+const KIND_NOUN: Record<ReceivableKind, string> = { cartao: 'reembolso do cartão', servico: 'serviço prestado', rateio: 'rateio de conta' }
 
 /**
  * Título da tela de cadastro, que acompanha as opções escolhidas:
@@ -47,7 +55,118 @@ export function receivableFormTitle(kind: ReceivableKind, opts: { editing: boole
 
 /** Endereço da lista de cada tipo (a de cartão é a padrão). */
 export function listPath(kind: ReceivableKind): string {
-  return kind === 'servico' ? '/receber?aba=servicos' : '/receber'
+  if (kind === 'servico') return '/receber?aba=servicos'
+  if (kind === 'rateio') return '/receber?aba=rateios'
+  return '/receber'
+}
+
+/** Tipo pela aba da lista ("?aba=servicos", "?aba=rateios"); sem aba, cartão. */
+export function kindOfTab(aba: string | null): ReceivableKind {
+  if (aba === 'servicos') return 'servico'
+  if (aba === 'rateios') return 'rateio'
+  return 'cartao'
+}
+
+/**
+ * Conta paga com cartão de crédito: a forma "Cartão" do app ou qualquer forma cadastrada cujo nome fale em crédito
+ * ou cartão (débito fica de fora). É o que pode ser ligado a um reembolso do cartão.
+ */
+export function isCardBill(bill: Pick<Bill, 'paymentMethod'>, payments: readonly { id: string; label: string }[]): boolean {
+  if (bill.paymentMethod === 'cartao') return true
+  const label = payments.find((p) => p.id === bill.paymentMethod)?.label ?? bill.paymentMethod
+  const key = simplify(label)
+  return !key.includes('debito') && (key.includes('credito') || key.includes('cartao'))
+}
+
+/* ---------- Rateio de conta ---------- */
+
+/** Rateio sem número de parcelas: repete todo mês até ser encerrado. */
+export function isOpenEnded(r: Pick<Receivable, 'kind' | 'recurring'>): boolean {
+  return r.kind === 'rateio' && r.recurring === true
+}
+
+/**
+ * Parcelas do rateio: `monthlyCents` a cada mês, a partir de `startMonth`, no dia de vencimento da conta ligada.
+ * Com `count`, são `count` meses; sem ele (sem fim), vai até `until` (ou até `endMonth`, se vier antes).
+ */
+export function buildRateio(
+  monthlyCents: number,
+  startMonth: Competence,
+  dueDay: number,
+  opts: { count: number } | { until: Competence; endMonth?: Competence | null },
+): Installment[] {
+  let months: number
+  if ('count' in opts) months = opts.count
+  else {
+    const last = opts.endMonth && opts.endMonth < opts.until ? opts.endMonth : opts.until
+    months = last < startMonth ? 1 : monthsBetween(startMonth, last) + 1
+  }
+  return Array.from({ length: months }, (_, k) => ({
+    number: k + 1,
+    dueDate: dueDateFor(addMonths(startMonth, k), dueDay),
+    amountCents: monthlyCents,
+    paidAt: null,
+    paidAmountCents: null,
+  }))
+}
+
+function monthsBetween(a: Competence, b: Competence): number {
+  const [ya, ma] = a.split('-').map(Number)
+  const [yb, mb] = b.split('-').map(Number)
+  return (yb - ya) * 12 + (mb - ma)
+}
+
+/**
+ * Completa o rateio sem fim até o mês `until` (ou até o mês de encerramento): as parcelas gravadas ficam como estão
+ * (com as baixas), e os meses que faltam entram com o valor mensal. Depois do encerramento, só ficam os meses já recebidos.
+ * Os outros tipos voltam sem mudança.
+ */
+export function extendRecurring(r: Receivable, until: Competence): Receivable {
+  if (!isOpenEnded(r)) return r
+  const start = competenceOf(r.firstDueDate)
+  const day = Number(r.firstDueDate.slice(8, 10))
+  const monthly = r.monthlyCents ?? r.installments[0]?.amountCents ?? 0
+  const fresh = buildRateio(monthly, start, day, { until, endMonth: r.endMonth ?? null })
+  const byNumber = new Map(r.installments.map((i) => [i.number, i]))
+  const installments = fresh.map((i) => byNumber.get(i.number) ?? i)
+  // Já gravadas além do horizonte (ex.: horizonte menor que o do relatório) continuam; depois do encerramento, só as com baixa.
+  for (const old of r.installments) {
+    if (old.number <= fresh.length) continue
+    const after = r.endMonth ? competenceOf(old.dueDate) > r.endMonth : false
+    if (!after || old.paidAt !== null) installments.push(old)
+  }
+  installments.sort((a, b) => a.number - b.number)
+  return {
+    ...r,
+    installments,
+    installmentCount: installments.length,
+    totalCents: installments.reduce((acc, i) => acc + i.amountCents, 0),
+  }
+}
+
+/** Rótulo de uma parcela: "Parcela 3 de 10" ou, no rateio sem fim, "Parte de nov/2026". */
+export function parcelLabel(r: Receivable, i: Installment): string {
+  return isOpenEnded(r) ? `Parte de ${formatCompetenceShort(competenceOf(i.dueDate))}` : `Parcela ${i.number} de ${r.installmentCount}`
+}
+
+/** "3/10" no parcelado; "nov/2026" no rateio sem fim; vazio em compra de uma parcela só. */
+export function parcelShort(r: Receivable, i: Installment): string {
+  if (isOpenEnded(r)) return formatCompetenceShort(competenceOf(i.dueDate))
+  return r.installmentCount > 1 ? `${i.number}/${r.installmentCount}` : ''
+}
+
+/** Para as mensagens: "parcela 3 de 10", "parcelas 2 e 3 de 10", "parte de nov/2026", "partes de out/2026 e nov/2026". */
+function pieces(r: Receivable, installments: Installment[]): string {
+  if (isOpenEnded(r)) {
+    const months = installments.map((i) => formatCompetenceShort(competenceOf(i.dueDate)))
+    return `${months.length === 1 ? 'parte' : 'partes'} de ${joinWords(months)}`
+  }
+  const nums = installments.map((i) => i.number)
+  return `${nums.length === 1 ? 'parcela' : 'parcelas'} ${joinNumbers(nums)} de ${r.installmentCount}`
+}
+
+function joinWords(items: string[]): string {
+  return items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}`
 }
 
 export function ofKind(receivables: Receivable[], kind: ReceivableKind): Receivable[] {
@@ -94,6 +213,10 @@ export interface ReceivableEdit {
   firstDueDate: IsoDate
   notes: string
   billId?: string | null
+  /** Rateio: valor por mês, sem fim e mês de encerramento. */
+  monthlyCents?: number
+  recurring?: boolean
+  endMonth?: Competence | null
 }
 
 /**
@@ -102,6 +225,29 @@ export interface ReceivableEdit {
  * da parcela (quem chama garante que o novo número de parcelas não é menor que a última parcela com baixa).
  */
 export function editReceivable(r: Receivable, edit: ReceivableEdit): Receivable {
+  if (edit.kind === 'rateio' && edit.recurring) {
+    // Sem fim: grava só os meses já gerados; os seguintes o app completa ao ler.
+    const day = Number(edit.firstDueDate.slice(8, 10))
+    const monthly = edit.monthlyCents ?? 0
+    const until = r.installments.length ? competenceOf(r.installments[r.installments.length - 1].dueDate) : competenceOf(edit.firstDueDate)
+    const base = { ...r, ...edit, monthlyCents: monthly, endMonth: edit.endMonth ?? null, recurring: true }
+    const fresh = buildRateio(monthly, competenceOf(edit.firstDueDate), day, { until, endMonth: edit.endMonth ?? null })
+    const kept = fresh.map((f) => {
+      const old = r.installments.find((i) => i.number === f.number)
+      return old && old.paidAt !== null ? { ...f, paidAt: old.paidAt, paidAmountCents: old.paidAmountCents } : f
+    })
+    return { ...base, installments: kept, installmentCount: kept.length, totalCents: kept.reduce((a, i) => a + i.amountCents, 0) }
+  }
+  if (edit.kind === 'rateio' && edit.monthlyCents !== undefined) {
+    // Rateio com parcelas: o valor é por mês, e o total é valor × parcelas.
+    const day = Number(edit.firstDueDate.slice(8, 10))
+    const fresh = buildRateio(edit.monthlyCents, competenceOf(edit.firstDueDate), day, { count: edit.installmentCount })
+    const kept = fresh.map((f) => {
+      const old = r.installments.find((i) => i.number === f.number)
+      return old && old.paidAt !== null ? { ...f, paidAt: old.paidAt, paidAmountCents: old.paidAmountCents } : f
+    })
+    return { ...r, ...edit, recurring: false, endMonth: null, installments: kept, totalCents: edit.monthlyCents * edit.installmentCount }
+  }
   const sameSchedule =
     edit.totalCents === r.totalCents &&
     edit.installmentCount === r.installmentCount &&
@@ -410,6 +556,7 @@ export function nextItems(receivables: Receivable[]): ChargeItem[] {
 
 /** Como a compra aparece na frase: "(Tênis)" ou "do serviço (Instalação)". */
 function ref(r: Receivable): string {
+  if (r.kind === 'rateio') return `do rateio (${r.description})`
   return r.kind === 'servico' ? `do serviço (${r.description})` : `(${r.description})`
 }
 
@@ -470,34 +617,31 @@ export function chargeMessage(person: Person, receivables: Receivable[], today: 
 
     if (overdue.length === 1) {
       const { receivable: r, installments } = overdue[0]
-      const nums = installments.map((i) => i.number)
       const oldest = installments[0].dueDate
-      const subject = `Parcela em atraso: ${r.description}`
+      const word = isOpenEnded(r) ? 'Parte' : 'Parcela'
       if (installments.length === 1) {
         return {
           kind: 'overdue',
-          subject,
+          subject: `${word} em atraso: ${r.description}`,
           totalCents: total,
-          text: `${hello} ${tone.missing} da parcela ${nums[0]} de ${r.installmentCount} ${ref(r)}, ${tone.valueOf} ${formatBRL(total)}, que venceu em ${formatDateBR(oldest)}. ${ask}`,
+          text: `${hello} ${tone.missing} da ${pieces(r, installments)} ${ref(r)}, ${tone.valueOf} ${formatBRL(total)}, que venceu em ${formatDateBR(oldest)}. ${ask}`,
         }
       }
       return {
         kind: 'overdue',
-        subject: `Parcelas em atraso: ${r.description}`,
+        subject: `${word}s em atraso: ${r.description}`,
         totalCents: total,
-        text: `${hello} ${tone.missing} das parcelas ${joinNumbers(nums)} de ${r.installmentCount} ${ref(r)}, que somam ${formatBRL(total)} (a mais antiga venceu em ${formatDateBR(oldest)}). ${ask}`,
+        text: `${hello} ${tone.missing} das ${pieces(r, installments)} ${ref(r)}, que somam ${formatBRL(total)} (a mais antiga venceu em ${formatDateBR(oldest)}). ${ask}`,
       }
     }
 
     const lines = overdue.map(({ receivable: r, installments }) => {
-      const nums = installments.map((i) => i.number)
       const sum = formatBRL(sumRemaining(installments))
-      const label = installments.length === 1 ? `parcela ${nums[0]}` : `parcelas ${joinNumbers(nums)}`
       const when =
         installments.length === 1
           ? `venceu em ${formatDateBR(installments[0].dueDate)}`
           : `a mais antiga venceu em ${formatDateBR(installments[0].dueDate)}`
-      return `• ${r.description}: ${label} de ${r.installmentCount}, ${sum} (${when})`
+      return `• ${r.description}: ${pieces(r, installments)}, ${sum} (${when})`
     })
     return {
       kind: 'overdue',
@@ -515,14 +659,14 @@ export function chargeMessage(person: Person, receivables: Receivable[], today: 
     const i = installments[0]
     return {
       kind: 'reminder',
-      subject: `Lembrete de parcela: ${r.description}`,
+      subject: `Lembrete de ${isOpenEnded(r) ? 'parte' : 'parcela'}: ${r.description}`,
       totalCents: total,
-      text: `${hello} ${tone.remind} da parcela ${i.number} de ${r.installmentCount} ${ref(r)}, de ${formatBRL(total)}, ${tone.due} ${formatDateBR(i.dueDate)}. ${tone.thanks}`,
+      text: `${hello} ${tone.remind} da ${pieces(r, [i])} ${ref(r)}, de ${formatBRL(total)}, ${tone.due} ${formatDateBR(i.dueDate)}. ${tone.thanks}`,
     }
   }
   const lines = next.map(({ receivable: r, installments }) => {
     const i = installments[0]
-    return `• ${r.description}: parcela ${i.number} de ${r.installmentCount}, ${formatBRL(installmentRemaining(i))}, vence em ${formatDateBR(i.dueDate)}`
+    return `• ${r.description}: ${pieces(r, [i])}, ${formatBRL(installmentRemaining(i))}, vence em ${formatDateBR(i.dueDate)}`
   })
   return {
     kind: 'reminder',

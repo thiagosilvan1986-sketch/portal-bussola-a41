@@ -12,6 +12,7 @@ import {
   RECEIVABLE_KINDS,
   forecastByMonth,
   lastChargeText,
+  kindOfTab,
   listPath,
   ofKind,
   summarizePerson,
@@ -27,6 +28,10 @@ const emptyText: Record<ReceivableKind, { title: string; body: string }> = {
     title: 'Nenhum serviço a receber',
     body: 'Prestou um serviço e vai receber depois ou em parcelas? Cadastre aqui para acompanhar o que falta, dar baixa a cada pagamento e cobrar com a mensagem pronta.',
   },
+  rateio: {
+    title: 'Nenhum rateio de conta',
+    body: 'Divide uma conta com alguém (aluguel, energia)? Ligue a parte da pessoa à conta a pagar: o app gera a cobrança todo mês, sem fim até você encerrar, ou pelo número de parcelas que informar.',
+  },
 }
 
 export default function Receivables() {
@@ -34,7 +39,7 @@ export default function Receivables() {
   const uid = useAuth().user!.uid
   const today = useToday()
   const [params] = useSearchParams()
-  const kind: ReceivableKind = params.get('aba') === 'servicos' ? 'servico' : 'cartao'
+  const kind: ReceivableKind = kindOfTab(params.get('aba'))
   const people = usePeople(uid)
   const receivables = useReceivables(uid)
 
@@ -63,8 +68,8 @@ export default function Receivables() {
     <main className="page">
       <header className="page-head">
         <h1>A receber</h1>
-        <Link className="btn primary small" to={kind === 'servico' ? '/receber/nova?tipo=servico' : '/receber/nova'}>
-          Nova compra
+        <Link className="btn primary small" to={kind === 'cartao' ? '/receber/nova' : `/receber/nova?tipo=${kind}`}>
+          {kind === 'rateio' ? 'Novo rateio' : 'Nova compra'}
         </Link>
       </header>
 
@@ -111,8 +116,8 @@ export default function Receivables() {
               : totals.remainingCents === 0
                 ? 'Tudo recebido'
                 : totals.purchaseCount === 1
-                  ? 'Em 1 compra parcelada'
-                  : `Em ${totals.purchaseCount} compras parceladas`}
+                  ? kind === 'rateio' ? 'Em 1 rateio' : 'Em 1 compra parcelada'
+                  : kind === 'rateio' ? `Em ${totals.purchaseCount} rateios` : `Em ${totals.purchaseCount} compras parceladas`}
           </span>
         </div>
         <div className={`card ${totals.overdueCents > 0 ? 'tone-danger' : 'tone-neutral'}`}>
@@ -135,11 +140,13 @@ export default function Receivables() {
         <div className="empty card">
           <h2>{emptyText[kind].title}</h2>
           <p className="muted">{emptyText[kind].body}</p>
-          <p className="muted">
-            Já tem uma planilha? <Link to="/cadastros/planilhas">Importe um CSV</Link>.
-          </p>
-          <Link className="btn primary" to={kind === 'servico' ? '/receber/nova?tipo=servico' : '/receber/nova'}>
-            Nova compra
+          {kind !== 'rateio' && (
+            <p className="muted">
+              Já tem uma planilha? <Link to="/cadastros/planilhas">Importe um CSV</Link>.
+            </p>
+          )}
+          <Link className="btn primary" to={kind === 'cartao' ? '/receber/nova' : `/receber/nova?tipo=${kind}`}>
+            {kind === 'rateio' ? 'Novo rateio' : 'Nova compra'}
           </Link>
         </div>
       ) : (
@@ -162,7 +169,7 @@ export default function Receivables() {
                           ? summary.purchaseCount === 1
                             ? '1 compra quitada'
                             : `${summary.purchaseCount} compras quitadas`
-                          : `${summary.purchaseCount === 1 ? '1 compra' : `${summary.purchaseCount} compras`}${
+                          : `${kind === 'rateio' ? (summary.purchaseCount === 1 ? '1 rateio' : `${summary.purchaseCount} rateios`) : summary.purchaseCount === 1 ? '1 compra' : `${summary.purchaseCount} compras`}${
                               summary.nextDueDate ? ` · próxima parcela ${formatDateBR(summary.nextDueDate)}` : ''
                             }`}
                     </span>
@@ -205,6 +212,10 @@ const forecastText: Record<ReceivableKind, { title: string; intro: string }> = {
   servico: {
     title: 'Quanto entra por mês',
     intro: 'Parcelas dos serviços pelo mês em que vencem.',
+  },
+  rateio: {
+    title: 'Quanto volta por mês',
+    intro: 'A parte de cada pessoa nas contas divididas, pelo mês em que vence.',
   },
 }
 

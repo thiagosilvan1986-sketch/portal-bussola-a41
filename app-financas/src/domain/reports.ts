@@ -1,7 +1,7 @@
 import { missingEntries } from './bills'
 import { addMonths, competenceOf } from './dates'
 import { amountDue, displayStatus, isPending, remainingCents } from './entries'
-import { installmentRemaining, installmentStatus, isSettled } from './receivables'
+import { installmentRemaining, installmentStatus, isSettled, parcelShort } from './receivables'
 import type { Bill, Competence, DisplayStatus, Entry, IsoDate, Person, Receivable, ReceivableKind } from './types'
 
 /* ---------- Períodos ---------- */
@@ -443,7 +443,8 @@ export function dueDayMap(
     for (const r of receivables)
       for (const i of r.installments)
         if (inRange.has(competenceOf(i.dueDate))) {
-          const parcel = r.installmentCount > 1 ? ` ${i.number}/${r.installmentCount}` : ''
+          const short = parcelShort(r, i)
+          const parcel = short ? ` ${short}` : ''
           const person = who.get(r.personId)
           add({
             name: `${person ? `${person} · ` : ''}${r.description}${parcel}`,

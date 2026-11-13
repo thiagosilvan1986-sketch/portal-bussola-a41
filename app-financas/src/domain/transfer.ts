@@ -179,7 +179,7 @@ const KINDS: Table<ReceivableKind> = [
 const YES = ['sim', 's', 'true', '1', 'ativa', 'ativo', 'yes', 'x']
 const NO = ['nao', 'n', 'false', '0', 'inativa', 'inativo', 'arquivada', 'arquivado', 'no']
 
-const KIND_CSV: Record<ReceivableKind, string> = { cartao: 'Cartão', servico: 'Serviço' }
+const KIND_CSV: Record<ReceivableKind, string> = { cartao: 'Cartão', servico: 'Serviço', rateio: 'Rateio' }
 const VALUE_TYPE_CSV: Record<ValueType, string> = { fixed: 'Fixo', variable: 'Variável' }
 
 /* ---------- Colunas ---------- */

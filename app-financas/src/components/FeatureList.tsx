@@ -24,14 +24,14 @@ export const FEATURES: { icon: string; title: string; text: string; version: str
   {
     icon: 'M12 4v11m0 0-4-4m4 4 4-4M5 20h14',
     title: 'Quem te deve, na ponta do lápis',
-    version: '1.13',
-    text: 'Reembolsos do cartão e serviços prestados, parcela a parcela, com a previsão do que volta a cada mês.',
+    version: '1.18',
+    text: 'Reembolsos do cartão, serviços prestados e rateios de conta, parcela a parcela, com a previsão do que volta a cada mês. No rateio, a parte da pessoa numa conta dividida (aluguel, energia) é cobrada todo mês, sem fim até você encerrar, ou pelo número de parcelas que informar.',
   },
   {
     icon: 'M12 3v18M5 7h14M5 7l-3 7a3 3 0 0 0 6 0L5 7zm14 0-3 7a3 3 0 0 0 6 0l-3-7z',
     title: 'Seu gasto real',
-    version: '1.7',
-    text: 'Ligue o reembolso do cartão à conta que você pagou. Pagou R$ 1.000 e vai receber R$ 500? O app mostra que o seu gasto de verdade foi R$ 500, na conta e nos relatórios (Bruto ou Real).',
+    version: '1.18',
+    text: 'Ligue o reembolso do cartão à conta paga com cartão de crédito, ou o rateio à conta dividida. Pagou R$ 1.000 e vai receber R$ 500? O app mostra que o seu gasto de verdade foi R$ 500, na conta e nos relatórios (Bruto ou Real).',
   },
   {
     icon: 'M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.2A8 8 0 1 1 21 12z',

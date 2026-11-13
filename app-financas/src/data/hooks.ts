@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { DEFAULT_ALERTS, type AlertSettings } from '../domain/alerts'
-import { todayInSaoPaulo } from '../domain/dates'
+import { addMonths, competenceOf, todayInSaoPaulo } from '../domain/dates'
+import { extendRecurring } from '../domain/receivables'
 import { defaultRegistry, type Registry } from '../domain/registry'
 import type { Bill, Competence, Entry, IsoDate, Person, Receivable } from '../domain/types'
 import {
@@ -51,8 +52,14 @@ export function usePeople(uid: string): Live<Person> {
   return state
 }
 
+/**
+ * Compras a receber. O rateio sem fim vem completo até o mês que vem (como as contas a pagar): os meses novos
+ * aparecem sozinhos e só são gravados quando recebem baixa.
+ */
 export function useReceivables(uid: string): Live<Receivable> {
   const [state, setState] = useState<Live<Receivable>>(INITIAL)
+  const today = useToday()
+  const horizon = addMonths(competenceOf(today), 1)
   useEffect(
     () =>
       subscribeReceivables(
@@ -62,7 +69,7 @@ export function useReceivables(uid: string): Live<Receivable> {
       ),
     [uid],
   )
-  return state
+  return useMemo(() => ({ ...state, data: state.data.map((r) => extendRecurring(r, horizon)) }), [state, horizon])
 }
 
 export function useEntries(uid: string, competence: Competence): Live<Entry> {
