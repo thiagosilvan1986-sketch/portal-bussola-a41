@@ -202,3 +202,32 @@ describe('Agenda do celular no Novo contato', () => {
     expect(field('Nome').value).toBe('Dani')
   })
 })
+
+describe('Agenda do celular: modo de vários contatos', () => {
+  const field = (label: string) => screen.getByLabelText(label) as HTMLInputElement
+  afterEach(() => {
+    delete (navigator as unknown as { contacts?: unknown }).contacts
+    delete (window as unknown as { ContactsManager?: unknown }).ContactsManager
+    sessionStorage.clear()
+  })
+  const android = (select: ReturnType<typeof vi.fn>) => {
+    ;(navigator as unknown as { contacts: unknown }).contacts = { select }
+    ;(window as unknown as { ContactsManager: unknown }).ContactsManager = class {}
+  }
+
+  it('com mais de um marcado, usa o primeiro e avisa', async () => {
+    android(vi.fn().mockResolvedValue([{ name: ['Mãe'], tel: ['(21) 98865-9770'], email: [] }, { name: ['Pai'], tel: [], email: [] }]))
+    renderAt('/cadastros/contatos/novo')
+    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
+    await waitFor(() => expect(field('Nome').value).toBe('Mãe'))
+    expect(screen.getByRole('status').textContent).toContain('Vieram 2 contatos; usei o primeiro.')
+  })
+
+  it('lista vazia: além do aviso, mostra o caminho do arquivo .vcf', async () => {
+    android(vi.fn().mockResolvedValue([]))
+    renderAt('/cadastros/contatos/novo')
+    fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Toque na caixinha do contato')
+    expect(screen.getByText(/abra o app Contatos, toque na pessoa, em Compartilhar e em Arquivo vCard/)).toBeTruthy()
+  })
+})

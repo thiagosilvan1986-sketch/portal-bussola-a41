@@ -714,7 +714,7 @@ describe('Contato da agenda', () => {
     expect(screen.queryByText(/No iPhone: abra o contato/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
     await waitFor(() => expect(field('Nome da pessoa').value).toBe('Bia Lima'))
-    expect(select).toHaveBeenCalledWith(['name', 'tel', 'email'], { multiple: false })
+    expect(select).toHaveBeenCalledWith(['name', 'tel', 'email'], { multiple: true })
     expect(field(/Telefone/).value).toBe('(11) 91234-5678')
     expect(field(/E-mail/).value).toBe('bia@exemplo.com')
   })
@@ -727,7 +727,7 @@ describe('Contato da agenda', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Escolher da agenda do celular' }))
     await waitFor(() => expect((navigator as unknown as { contacts: { select: ReturnType<typeof vi.fn> } }).contacts.select).toHaveBeenCalled())
     expect(field('Nome da pessoa').value).toBe('')
-    expect((await screen.findByRole('alert')).textContent).toBe('Nenhum contato foi escolhido. Toque no contato e depois em Concluído.')
+    expect((await screen.findByRole('alert')).textContent).toBe('Nenhum contato foi escolhido. Toque na caixinha do contato até aparecer a marca e depois em Concluído.')
   })
 
   it('na edição do contato da pessoa também dá para importar', async () => {

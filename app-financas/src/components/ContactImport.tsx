@@ -60,6 +60,7 @@ function readText(file: File): Promise<string> {
 export function ContactImport({ onPick }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null)
+  const [noContact, setNoContact] = useState(false)
   const canPick = supportsContactPicker()
 
   function done(contact: ContactData, extra = '') {
@@ -81,10 +82,11 @@ export function ContactImport({ onPick }: Props) {
   // Ao abrir a tela (ou quando a agenda responde depois de a tela ter sido refeita), usa o contato guardado.
   useEffect(() => {
     const apply = () => {
-      const saved = take<ContactData>(RESULT_KEY)
+      const saved = take<ContactData & { extra?: string }>(RESULT_KEY)
       if (saved) {
         sessionStorage.removeItem(OPEN_KEY)
-        doneRef.current(saved)
+        const { extra = '', ...contact } = saved
+        doneRef.current(contact, extra)
         return
       }
       if (take<boolean>(OPEN_KEY)) {
@@ -103,17 +105,20 @@ export function ContactImport({ onPick }: Props) {
     setMessage(null)
     store(OPEN_KEY, true)
     try {
-      const contact = await pickPhoneContact()
-      if (!contact) {
+      const result = await pickPhoneContact()
+      if (!result) {
         try {
           sessionStorage.removeItem(OPEN_KEY)
         } catch {
           /* nada */
         }
-        setMessage({ text: 'Nenhum contato foi escolhido. Toque no contato e depois em Concluído.', error: true })
+        setNoContact(true)
+        setMessage({ text: 'Nenhum contato foi escolhido. Toque na caixinha do contato até aparecer a marca e depois em Concluído.', error: true })
         return
       }
-      store(RESULT_KEY, contact)
+      setNoContact(false)
+      const extra = result.picked > 1 ? ` Vieram ${result.picked} contatos; usei o primeiro.` : ''
+      store(RESULT_KEY, { ...result.contact, extra })
       window.dispatchEvent(new Event(RESULT_EVENT))
     } catch (e) {
       try {
@@ -172,6 +177,12 @@ export function ContactImport({ onPick }: Props) {
       {message && (
         <p className={message.error ? 'error small-note' : 'muted small-note'} role={message.error ? 'alert' : 'status'}>
           {message.text}
+        </p>
+      )}
+      {noContact && (
+        <p className="muted small-note">
+          Se o celular não deixar marcar o contato: abra o app Contatos, toque na pessoa, em Compartilhar e em Arquivo vCard (.vcf). Salve o
+          arquivo e toque aqui em Importar contato (.vcf).
         </p>
       )}
     </div>

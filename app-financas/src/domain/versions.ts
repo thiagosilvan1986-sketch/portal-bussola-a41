@@ -20,6 +20,7 @@ export const VERSIONS: readonly { version: string; date: IsoDate; summary: strin
   { version: '1.12', date: '2026-11-13', summary: 'Tamanho da letra e cores mais legíveis' },
   { version: '1.13', date: '2026-11-13', summary: 'Configurações, Contatos e relatório do mês' },
   { version: '1.14', date: '2026-11-13', summary: 'Versões no Sobre, nomes no mapa de vencimentos e agenda do celular' },
+  { version: '1.15', date: '2026-11-13', summary: 'Agenda do celular no modo que deixa marcar o contato' },
 ]
 
 export const CURRENT_VERSION = VERSIONS[VERSIONS.length - 1]

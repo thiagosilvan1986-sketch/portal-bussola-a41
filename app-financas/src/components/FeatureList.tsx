@@ -54,7 +54,7 @@ export const FEATURES: { icon: string; title: string; text: string; version: str
   {
     icon: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-8 9a8 8 0 0 1 16 0',
     title: 'Contato sem digitar',
-    version: '1.14',
+    version: '1.15',
     text: 'Ao cadastrar uma pessoa, traga nome, telefone e e-mail direto da agenda do celular (Android) ou de um arquivo de contato .vcf (iPhone).',
   },
   {

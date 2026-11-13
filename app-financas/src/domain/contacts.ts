@@ -35,11 +35,15 @@ export function contactFromPicker(raw: PickerContact): ContactData {
   return { name, phone: tel ? formatPhone(tel) : '', email }
 }
 
-/** Abre a agenda do celular. Devolve null se a pessoa fechou sem escolher. */
-export async function pickPhoneContact(): Promise<ContactData | null> {
+/**
+ * Abre a agenda do celular. Devolve null se a pessoa fechou sem escolher, e quantos contatos vieram marcados.
+ * Pede no modo de vários contatos: em alguns celulares (Samsung) o modo de um só não deixa marcar o contato e a
+ * agenda devolve a lista vazia. Usa o primeiro marcado.
+ */
+export async function pickPhoneContact(): Promise<{ contact: ContactData; picked: number } | null> {
   const contacts = (navigator as unknown as { contacts: ContactsManager }).contacts
-  const picked = await contacts.select(['name', 'tel', 'email'], { multiple: false })
-  return picked.length === 0 ? null : contactFromPicker(picked[0])
+  const picked = await contacts.select(['name', 'tel', 'email'], { multiple: true })
+  return picked.length === 0 ? null : { contact: contactFromPicker(picked[0]), picked: picked.length }
 }
 
 /* ---------- Arquivo .vcf (vCard) ---------- */
