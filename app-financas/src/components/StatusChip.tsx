@@ -12,11 +12,12 @@ export const STATUS_ICON: Record<DisplayStatus, string> = {
 }
 
 /** Status sempre em texto além da cor (acessibilidade). */
-export function StatusChip({ status }: { status: DisplayStatus }) {
+/** `receber`: o que é pago a você aparece como "Recebida" (e "Prevista" no lugar de "Cobrança recebida" não se aplica). */
+export function StatusChip({ status, receber = false }: { status: DisplayStatus; receber?: boolean }) {
   return (
     <span className={`chip chip-${status} status-chip`}>
       <span aria-hidden="true">{STATUS_ICON[status]} </span>
-      {STATUS_LABEL[status]}
+      {receber && status === 'paga' ? 'Recebida' : STATUS_LABEL[status]}
     </span>
   )
 }

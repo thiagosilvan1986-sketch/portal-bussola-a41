@@ -24,8 +24,8 @@ export const FEATURES: { icon: string; title: string; text: string; version: str
   {
     icon: 'M12 4v11m0 0-4-4m4 4 4-4M5 20h14',
     title: 'Quem te deve, na ponta do lápis',
-    version: '1.18',
-    text: 'Reembolsos do cartão, serviços prestados e rateios de conta, parcela a parcela, com a previsão do que volta a cada mês. No rateio, a parte da pessoa numa conta dividida (aluguel, energia) é cobrada todo mês, sem fim até você encerrar, ou pelo número de parcelas que informar.',
+    version: '1.20',
+    text: 'Reembolsos do cartão, serviços prestados e rateios de conta, parcela a parcela, com a previsão do que volta a cada mês. No rateio, a parte da pessoa numa conta dividida (aluguel, energia) é cobrada todo mês, sem fim até você encerrar, ou pelo número de parcelas que informar. O resumo mostra o que falta no Mês, no Ano ou em Tudo.',
   },
   {
     icon: 'M12 3v18M5 7h14M5 7l-3 7a3 3 0 0 0 6 0L5 7zm14 0-3 7a3 3 0 0 0 6 0l-3-7z',
@@ -72,14 +72,14 @@ export const FEATURES: { icon: string; title: string; text: string; version: str
   {
     icon: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 4.500v5M9 14.500v5',
     title: 'Do seu jeito',
-    version: '1.13',
-    text: 'Em Configurações (aba Ajustes), crie e mude categorias, formas de pagamento, atalhos de conta, fornecedores e contatos. Renomear atualiza tudo o que já existe.',
+    version: '1.20',
+    text: 'Em Configurações (aba Ajustes), crie e mude categorias, formas de pagamento, atalhos de conta, fornecedores e contatos. Renomear atualiza tudo o que já existe. Faltou uma categoria ou forma de pagamento? Cadastre ali mesmo, em “+ Nova”, sem sair da conta; e, no rateio, “+ Nova conta” volta com a conta escolhida.',
   },
   {
     icon: 'M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3',
     title: 'Ordene como preferir',
-    version: '1.11',
-    text: 'Em cada lista, escolha o critério (vencimento, nome, valor…) e toque em Crescente ou Decrescente para inverter. O app guarda a sua escolha, tela por tela, neste aparelho.',
+    version: '1.20',
+    text: 'Todas as listas abrem em ordem alfabética. Em cada uma, escolha outro critério (vencimento, valor…) e toque em Crescente ou Decrescente para inverter. O app guarda a sua escolha, tela por tela, neste aparelho.',
   },
   {
     icon: 'M4 20 9 6l5 14M6 15h6M15 20l3-8 3 8M16 18h4',
@@ -102,8 +102,8 @@ export const FEATURES: { icon: string; title: string; text: string; version: str
   {
     icon: 'M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7zm4 10a2 2 0 0 0 4 0',
     title: 'Tudo à vista, logo na entrada',
-    version: '1.9',
-    text: 'Atrasos e vencimentos de hoje te recebem aqui, antes de virarem problema.',
+    version: '1.20',
+    text: 'Atrasos e vencimentos de hoje te recebem aqui, antes de virarem problema. A Início mostra toda a movimentação do mês, o que você paga e o que recebe, com o saldo do mês e filtros por tipo, situação e categoria.',
   },
 ]
 

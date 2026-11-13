@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { defaultRegistry } from '../domain/registry'
 import { extendRecurring } from '../domain/receivables'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildInstallments, withPayment } from '../domain/receivables'
 import type { Bill, Person, Receivable } from '../domain/types'
@@ -77,6 +77,9 @@ function renderAt(path: string) {
 }
 
 beforeEach(() => {
+  // Os testes antigos conferem o total de todas as parcelas: período "Tudo". O padrão (Mês) tem teste próprio.
+  window.localStorage.clear()
+  window.localStorage.setItem('contas-em-dia:escolha:receber-periodo', 'tudo')
   hooks.useToday.mockReturnValue(TODAY)
   hooks.useBills.mockReturnValue({ data: [], ready: true, error: null })
   setData([ana, bruno], [tenis()])
@@ -94,7 +97,7 @@ describe('lista A receber', () => {
   it('mostra totais, atrasos e as pessoas', () => {
     renderAt('/receber')
     // parcelas 2 (05/10) e 3 (05/11) vencidas; 1 recebida
-    expect(flat(screen.getByText('Falta receber').parentElement!.textContent)).toContain('R$ 378,00')
+    expect(flat(screen.getByText(/^Falta receber/).parentElement!.textContent)).toContain('R$ 378,00')
     expect(screen.getByRole('status').textContent).toContain('2 parcelas atrasadas')
     const row = screen.getByRole('link', { name: /Ana Souza/ })
     expect(row.textContent).toContain('2 parcelas atrasadas')
@@ -113,13 +116,13 @@ describe('lista A receber', () => {
     setData([ana, bruno], [tenis(), instalacao(), { ...tenis(), id: 'r3', personId: 'p2', description: 'Mochila', installments: buildInstallments(9000, 3, '2026-12-01'), totalCents: 9000, installmentCount: 3 }])
     renderAt('/receber')
     // aba do cartão: Tênis (Ana) + Mochila (Bruno); o serviço da Ana não entra
-    expect(flat(screen.getByText('Falta receber').parentElement!.textContent)).toContain('R$ 468,00')
+    expect(flat(screen.getByText(/^Falta receber/).parentElement!.textContent)).toContain('R$ 468,00')
     expect(screen.getByRole('link', { name: /^Cartão/ }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: /Bruno Lima/ })).toBeTruthy()
 
     cleanup()
     renderAt('/receber?aba=servicos')
-    expect(flat(screen.getByText('Falta receber').parentElement!.textContent)).toContain('R$ 300,00')
+    expect(flat(screen.getByText(/^Falta receber/).parentElement!.textContent)).toContain('R$ 300,00')
     expect(screen.getByRole('link', { name: /^Serviços/ }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('link', { name: /Ana Souza/ }).textContent).toContain('1 parcela atrasada')
     expect(screen.queryByRole('link', { name: /Bruno Lima/ })).toBeNull()
@@ -479,8 +482,8 @@ describe('página da pessoa', () => {
     const servico = screen.getByRole('region', { name: 'Serviço prestado' })
     expect(within(cartao).getByText('Tênis')).toBeTruthy()
     expect(within(cartao).queryByText('Instalação')).toBeNull()
-    expect(flat(within(cartao).getByText('Falta receber').parentElement!.textContent)).toContain('R$ 378,00')
-    expect(flat(within(servico).getByText('Falta receber').parentElement!.textContent)).toContain('R$ 300,00')
+    expect(flat(within(cartao).getByText(/^Falta receber/).parentElement!.textContent)).toContain('R$ 378,00')
+    expect(flat(within(servico).getByText(/^Falta receber/).parentElement!.textContent)).toContain('R$ 300,00')
 
     fireEvent.click(screen.getByRole('button', { name: 'Cobrar Ana (serviço prestado)' }))
     const text = (within(screen.getByRole('dialog')).getByRole('textbox') as HTMLTextAreaElement).value
@@ -783,5 +786,77 @@ describe('Rateio de conta', () => {
     const saved = store.updateReceivable.mock.calls[0][1]
     expect(saved).toMatchObject({ endMonth: '2026-11', recurring: true })
     expect(saved.installments.map((i: { dueDate: string }) => i.dueDate)).toEqual(['2026-10-10', '2026-11-10'])
+  })
+})
+
+describe('+ Nova conta no rateio', () => {
+  const aluguel: Bill = {
+    id: 'b1', name: 'Aluguel', category: 'Moradia', supplier: '', valueType: 'fixed', expectedAmountCents: 190800, dueDay: 10,
+    recurrence: 'monthly', startMonth: '2026-01', paymentMethod: 'pix', notes: '', active: true,
+  }
+  beforeEach(() => window.sessionStorage.clear())
+
+  it('guarda o que foi preenchido, abre o cadastro da conta e, ao voltar, recupera tudo com a conta nova escolhida', () => {
+    hooks.useBills.mockReturnValue({ data: [], ready: true, error: null })
+    let landed = ''
+    render(
+      <MemoryRouter initialEntries={['/receber/nova?pessoa=p1&tipo=rateio']}>
+        <Routes>
+          <Route path="/receber/nova" element={<ReceivableForm />} />
+          <Route path="/contas/nova" element={<NovaContaSpy onSeen={(to) => (landed = to)} />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    fireEvent.change(screen.getByLabelText(/Parte da pessoa por mês/), { target: { value: '954,00' } })
+    fireEvent.change(screen.getByLabelText('Descrição (opcional)'), { target: { value: 'Parte da Ana' } })
+    fireEvent.click(screen.getByRole('button', { name: '+ Nova conta' }))
+    expect(landed).toBe('/receber/nova?pessoa=p1&tipo=rateio')
+    cleanup()
+
+    // a conta foi criada e o cadastro voltou com ?conta=
+    hooks.useBills.mockReturnValue({ data: [aluguel], ready: true, error: null })
+    renderAt('/receber/nova?pessoa=p1&tipo=rateio&conta=b1')
+    expect((screen.getByLabelText('Conta a pagar dividida') as HTMLSelectElement).value).toBe('b1')
+    expect((screen.getByLabelText(/Parte da pessoa por mês/) as HTMLInputElement).value).toBe('954,00')
+    expect((screen.getByLabelText('Descrição (opcional)') as HTMLInputElement).value).toBe('Parte da Ana')
+    // o rascunho é usado uma vez só
+    expect(window.sessionStorage.getItem('contas-em-dia:rascunho-receber')).toBeNull()
+  })
+})
+
+function NovaContaSpy({ onSeen }: { onSeen: (to: string) => void }) {
+  const [params] = useSearchParams()
+  onSeen(params.get('voltar') ?? '')
+  return <p>cadastro da conta</p>
+}
+
+describe('período do resumo (Mês | Ano | Tudo)', () => {
+  it('começa em Mês: o que vence neste mês mais o que está atrasado; a escolha fica guardada', () => {
+    window.localStorage.removeItem('contas-em-dia:escolha:receber-periodo')
+    // Tênis: 3 × 126,00 de 05/09; parcela 1 recebida; 2 (05/10) e 3 (05/11) em aberto; hoje é 09/11
+    renderAt('/receber')
+    const picker = screen.getByRole('group', { name: 'Período do resumo' })
+    expect(within(picker).getByRole('button', { name: 'Mês' }).getAttribute('aria-pressed')).toBe('true')
+    expect(flat(screen.getByText(/^Falta receber/).parentElement!.textContent)).toContain('Falta receber neste mês')
+    fireEvent.click(within(picker).getByRole('button', { name: 'Tudo' }))
+    expect(flat(screen.getByText(/^Falta receber/).parentElement!.textContent)).toContain('Falta receber no total')
+    expect(window.localStorage.getItem('contas-em-dia:escolha:receber-periodo')).toBe('tudo')
+  })
+
+  it('no rateio sem fim, Mês mostra só o mês e Ano soma até dezembro', () => {
+    window.localStorage.setItem('contas-em-dia:escolha:receber-periodo', 'mes')
+    const r: Receivable = {
+      id: 'r5', personId: 'p1', kind: 'rateio', description: 'Parte da Ana', totalCents: 0, installmentCount: 0,
+      firstDueDate: '2026-11-18', installments: [], notes: '', billId: 'b1', recurring: true, monthlyCents: 100000, endMonth: null,
+    }
+    setData([ana], [extendRecurring(r, '2026-12')])
+    renderAt('/receber?aba=rateios')
+    const main = () => flat(screen.getByText(/^Falta receber/).parentElement!.textContent)
+    expect(main()).toContain('R$ 1.000,00')
+    fireEvent.click(screen.getByRole('button', { name: 'Ano' }))
+    expect(main()).toContain('R$ 2.000,00') // novembro e dezembro
+    cleanup()
+    renderAt('/receber/pessoa/p1')
+    expect(flat(screen.getByRole('region', { name: 'Parte da Ana' }).textContent)).toContain('falta R$ 1.000,00 este mês')
   })
 })

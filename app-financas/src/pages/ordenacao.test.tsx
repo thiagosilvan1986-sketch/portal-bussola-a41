@@ -128,14 +128,18 @@ const dirButton = (group: string) => bar(group).getByRole('button')
 
 describe('Ordenação no Início', () => {
   const GROUP = 'Ordenação das contas do mês'
+  // Aqui o assunto é a ordem das contas: filtro "A pagar" (o padrão Tudo traz também o que se recebe).
+  beforeEach(() => window.localStorage.setItem('contas-em-dia:escolha:inicio-lado', 'pagar'))
 
-  it('abre na ordem de sempre: por vencimento, com o seletor visível em texto', () => {
+  it('abre em ordem alfabética (Nome, A–Z), com o seletor visível em texto; Vencimento continua disponível', () => {
     renderAt('/')
-    expect(titles()).toEqual(['Condomínio', 'Energia', 'Seguro', 'Internet'])
+    expect(titles()).toEqual(['Condomínio', 'Energia', 'Internet', 'Seguro'])
     const select = bar(GROUP).getByLabelText('Ordenar por') as HTMLSelectElement
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Vencimento', 'Nome', 'Valor'])
-    expect(select.selectedOptions[0].textContent).toBe('Vencimento')
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Nome', 'Vencimento', 'Valor'])
+    expect(select.selectedOptions[0].textContent).toBe('Nome')
     expect(dirButton(GROUP).textContent).toContain('Crescente')
+    pick(GROUP, 'Vencimento')
+    expect(titles()).toEqual(['Condomínio', 'Energia', 'Seguro', 'Internet'])
   })
 
   it('ordena por valor (do maior para o menor) e o botão inverte', () => {
@@ -217,11 +221,13 @@ describe('Ordenação em A pagar', () => {
 describe('Ordenação em A receber', () => {
   const GROUP = 'Ordenação das pessoas'
 
-  it('abre pela situação (atrasados primeiro) e a situação não tem botão de sentido', () => {
+  it('abre por nome; a situação (atrasados primeiro) não tem botão de sentido', () => {
     renderAt('/receber')
     expect(titles()).toEqual(['Ana Souza', 'Carla Dias'])
     const select = bar(GROUP).getByLabelText('Ordenar por') as HTMLSelectElement
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Situação (atrasados primeiro)', 'Nome', 'Valor a receber', 'Próximo vencimento'])
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Nome', 'Situação (atrasados primeiro)', 'Valor a receber', 'Próximo vencimento'])
+    expect(select.selectedOptions[0].textContent).toBe('Nome')
+    pick(GROUP, 'Situação (atrasados primeiro)')
     expect(bar(GROUP).queryByRole('button')).toBeNull()
   })
 
@@ -256,8 +262,10 @@ describe('Ordenação das compras de uma pessoa', () => {
       .map((h) => h.textContent)
       .filter((t) => ['Geladeira', 'Bicicleta', 'Celular'].includes(t ?? ''))
 
-  it('abre pela situação (a mais urgente primeiro) e ordena por nome, valor e próxima parcela', () => {
+  it('abre por nome da compra e ordena pela situação, valor e próxima parcela', () => {
     renderAt('/receber/pessoa/p1')
+    expect(purchases()).toEqual(['Bicicleta', 'Celular', 'Geladeira'])
+    pick(GROUP, 'Situação (com saldo primeiro)')
     expect(purchases()).toEqual(['Geladeira', 'Celular', 'Bicicleta'])
     pick(GROUP, 'Nome da compra')
     expect(purchases()).toEqual(['Bicicleta', 'Celular', 'Geladeira'])
@@ -276,29 +284,29 @@ describe('Ordenação das compras de uma pessoa', () => {
 })
 
 describe('Ordenação nos Cadastros', () => {
-  it('categorias: ordem de cadastro por padrão, ou por nome A–Z e Z–A', () => {
+  it('categorias: por nome A–Z por padrão (e Z–A), ou na ordem de cadastro', () => {
     const reg = { ...defaultRegistry(), categories: ['Viagens', 'Moradia', 'Água'] }
     setup({ registry: reg })
     renderAt('/cadastros/categorias')
     const GROUP = 'Ordenação de categorias'
-    expect(titles()).toEqual(['Viagens', 'Moradia', 'Água'])
-    expect(bar(GROUP).queryByRole('button')).toBeNull()
-    pick(GROUP, 'Nome')
     expect(titles()).toEqual(['Água', 'Moradia', 'Viagens'])
     fireEvent.click(dirButton(GROUP))
     expect(titles()).toEqual(['Viagens', 'Moradia', 'Água'])
+    pick(GROUP, 'Ordem de cadastro')
+    expect(titles()).toEqual(['Viagens', 'Moradia', 'Água'])
+    expect(bar(GROUP).queryByRole('button')).toBeNull()
   })
 
   it('formas de pagamento e fornecedores têm a sua própria ordem guardada', () => {
     const reg = { ...defaultRegistry(), suppliers: ['Zeca', 'Ana', 'Marta'] }
     setup({ registry: reg })
     const first = renderAt('/cadastros/fornecedores')
-    pick('Ordenação de fornecedores', 'Nome')
-    expect(titles()).toEqual(['Ana', 'Marta', 'Zeca'])
+    pick('Ordenação de fornecedores', 'Ordem de cadastro')
+    expect(titles()).toEqual(['Zeca', 'Ana', 'Marta'])
     first.unmount()
     renderAt('/cadastros/pagamentos')
     expect(screen.getByRole('group', { name: 'Ordenação de formas de pagamento' })).toBeTruthy()
-    expect((bar('Ordenação de formas de pagamento').getByLabelText('Ordenar por') as HTMLSelectElement).selectedOptions[0].textContent).not.toBe('Nome')
+    expect((bar('Ordenação de formas de pagamento').getByLabelText('Ordenar por') as HTMLSelectElement).selectedOptions[0].textContent).toBe('Nome')
   })
 
   it('atalhos: por nome, valor e dia, e o que não tem valor ou dia fica no fim', () => {
@@ -308,9 +316,9 @@ describe('Ordenação nos Cadastros', () => {
     setup({ registry: reg })
     renderAt('/cadastros/atalhos')
     const GROUP = 'Ordenação dos atalhos'
-    expect(titles()).toEqual(['Seguro', 'Academia', 'Internet', 'Condomínio'])
-    pick(GROUP, 'Nome')
     expect(titles()).toEqual(['Academia', 'Condomínio', 'Internet', 'Seguro'])
+    pick(GROUP, 'Ordem de cadastro')
+    expect(titles()).toEqual(['Seguro', 'Academia', 'Internet', 'Condomínio'])
     pick(GROUP, 'Valor')
     expect(titles()).toEqual(['Condomínio', 'Seguro', 'Internet', 'Academia'])
     pick(GROUP, 'Dia do vencimento')

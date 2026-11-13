@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useBills, usePeople, useReceivables, useRegistry, useToday } from '../data/hooks'
 import { createReceivable, updateReceivable } from '../data/store'
@@ -8,6 +8,7 @@ import { ContactImport } from '../components/ContactImport'
 import { CopyButton } from '../components/CopyButton'
 import { MoneyInput } from '../components/MoneyInput'
 import { copyName } from '../domain/registry'
+import { alphabetical } from '../domain/text'
 import { addMonths, competenceOf, dueDateFor, formatCompetence } from '../domain/dates'
 import {
   KIND_INFO,
@@ -31,6 +32,62 @@ import {
 import type { Competence, MessageTone, Person, Receivable, ReceivableKind } from '../domain/types'
 
 const NEW_PERSON = '__new'
+
+/* "+ Nova conta": o que já foi preenchido fica guardado nesta aba enquanto a pessoa cadastra a conta, e volta ao retornar. */
+const DRAFT_KEY = 'contas-em-dia:rascunho-receber'
+const DRAFT_MAX_AGE = 30 * 60 * 1000
+
+interface Draft {
+  path: string
+  savedAt: number
+  kind: ReceivableKind
+  personChoice: string
+  name: string
+  phone: string
+  email: string
+  tone: MessageTone
+  description: string
+  total: string
+  count: string
+  firstDue: string
+  received: string
+  notes: string
+  billId: string
+  monthly: string
+  rateioCount: string
+  startMonth: string
+  endMonth: string
+}
+
+/** Caminho da tela sem o "conta=" da volta, para o rascunho valer só para a mesma tela. */
+function screenPath(pathname: string, search: string): string {
+  const q = new URLSearchParams(search)
+  q.delete('conta')
+  const rest = q.toString()
+  return rest ? `${pathname}?${rest}` : pathname
+}
+
+/** Lê e apaga o rascunho desta tela (se for recente). */
+function takeDraft(path: string): Draft | null {
+  try {
+    const raw = window.sessionStorage.getItem(DRAFT_KEY)
+    if (!raw) return null
+    const d = JSON.parse(raw) as Draft
+    if (d.path !== path || Date.now() - d.savedAt > DRAFT_MAX_AGE) return null
+    window.sessionStorage.removeItem(DRAFT_KEY)
+    return d
+  } catch {
+    return null
+  }
+}
+
+function keepDraft(d: Draft): void {
+  try {
+    window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(d))
+  } catch {
+    /* sem armazenamento: ao voltar, o formulário recomeça */
+  }
+}
 const log = (e: unknown) => console.error('Falha ao gravar', e)
 
 export default function ReceivableForm() {
@@ -104,40 +161,59 @@ interface FormProps {
 function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }: FormProps) {
   const navigate = useNavigate()
   const [params] = useSearchParams()
+  const location = useLocation()
   const today = useToday()
+  const here = screenPath(location.pathname, location.search)
+  // Voltando de "+ Nova conta": recupera o que estava preenchido e já escolhe a conta criada.
+  const [draft] = useState(() => takeDraft(here))
+  const newBillId = params.get('conta')
 
   const source = edit ?? copyOf
   const tipo = params.get('tipo')
-  const [kind, setKind] = useState<ReceivableKind>(source?.kind ?? (tipo === 'servico' || tipo === 'rateio' ? tipo : 'cartao'))
-  const [personChoice, setPersonChoice] = useState(copyPerson ? NEW_PERSON : copyOf ? copyOf.personId : (params.get('pessoa') ?? ''))
-  const [name, setName] = useState(copyPerson ? copyName(copyPerson.name, people.map((p) => p.name), 60) : '')
-  const [phone, setPhone] = useState(copyPerson?.phone ? formatPhone(copyPerson.phone) : '')
-  const [email, setEmail] = useState(copyPerson?.email ?? '')
-  const [tone, setTone] = useState<MessageTone>(copyPerson ? personTone(copyPerson) : 'amigavel')
-  const [description, setDescription] = useState(edit ? edit.description : copyOf ? copyName(copyOf.description, [copyOf.description], 80) : '')
-  const [total, setTotal] = useState(source ? centsToInput(source.totalCents) : '')
-  const [count, setCount] = useState(source ? String(source.installmentCount) : '10')
+  const [kind, setKind] = useState<ReceivableKind>(draft?.kind ?? source?.kind ?? (tipo === 'servico' || tipo === 'rateio' ? tipo : 'cartao'))
+  const [personChoice, setPersonChoice] = useState(draft?.personChoice ?? (copyPerson ? NEW_PERSON : copyOf ? copyOf.personId : (params.get('pessoa') ?? '')))
+  const [name, setName] = useState(draft?.name ?? (copyPerson ? copyName(copyPerson.name, people.map((p) => p.name), 60) : ''))
+  const [phone, setPhone] = useState(draft?.phone ?? (copyPerson?.phone ? formatPhone(copyPerson.phone) : ''))
+  const [email, setEmail] = useState(draft?.email ?? copyPerson?.email ?? '')
+  const [tone, setTone] = useState<MessageTone>(draft?.tone ?? (copyPerson ? personTone(copyPerson) : 'amigavel'))
+  const [description, setDescription] = useState(draft?.description ?? (edit ? edit.description : copyOf ? copyName(copyOf.description, [copyOf.description], 80) : ''))
+  const [total, setTotal] = useState(draft?.total ?? (source ? centsToInput(source.totalCents) : ''))
+  const [count, setCount] = useState(draft?.count ?? (source ? String(source.installmentCount) : '10'))
   // A cópia começa hoje: o vencimento antigo geraria parcelas atrasadas que a pessoa não pediu.
-  const [firstDue, setFirstDue] = useState(edit ? edit.firstDueDate : today)
-  const [received, setReceived] = useState('0')
+  const [firstDue, setFirstDue] = useState(draft?.firstDue ?? (edit ? edit.firstDueDate : today))
+  const [received, setReceived] = useState(draft?.received ?? '0')
   // Rateio: valor da parte da pessoa por mês, parcelas (vazio = todo mês, sem fim), mês de início e, para encerrar, o último mês.
   const sourceRateio = source?.kind === 'rateio' ? source : undefined
-  const [monthly, setMonthly] = useState(sourceRateio ? centsToInput(sourceRateio.monthlyCents ?? sourceRateio.installments[0]?.amountCents ?? 0) : '')
-  const [rateioCount, setRateioCount] = useState(sourceRateio && !sourceRateio.recurring ? String(sourceRateio.installmentCount) : '')
-  const [startMonth, setStartMonth] = useState<Competence>(edit?.kind === 'rateio' ? competenceOf(edit.firstDueDate) : competenceOf(today))
-  const [endMonth, setEndMonth] = useState<string>(edit?.kind === 'rateio' ? (edit.endMonth ?? '') : '')
-  const [notes, setNotes] = useState(source?.notes ?? '')
+  const [monthly, setMonthly] = useState(draft?.monthly ?? (sourceRateio ? centsToInput(sourceRateio.monthlyCents ?? sourceRateio.installments[0]?.amountCents ?? 0) : ''))
+  const [rateioCount, setRateioCount] = useState(draft?.rateioCount ?? (sourceRateio && !sourceRateio.recurring ? String(sourceRateio.installmentCount) : ''))
+  const [startMonth, setStartMonth] = useState<Competence>(draft?.startMonth ?? (edit?.kind === 'rateio' ? competenceOf(edit.firstDueDate) : competenceOf(today)))
+  const [endMonth, setEndMonth] = useState<string>(draft?.endMonth ?? (edit?.kind === 'rateio' ? (edit.endMonth ?? '') : ''))
+  const [notes, setNotes] = useState(draft?.notes ?? source?.notes ?? '')
   // Reembolso do cartão pode se referir a uma conta paga com cartão de crédito; o rateio é sempre de uma conta a pagar.
   // O app mostra o gasto real: o que foi pago menos o que a pessoa devolve.
   const bills = useBills(uid).data
   const payments = useRegistry(uid).data.payments
-  const [billId, setBillId] = useState(source?.billId ?? '')
+  const [billId, setBillId] = useState(newBillId ?? draft?.billId ?? source?.billId ?? '')
   const billOptions = useMemo(() => {
     const shown = kind === 'cartao' ? bills.filter((b) => isCardBill(b, payments) || b.id === source?.billId) : bills
-    return [...shown].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, 'pt-BR'))
+    return alphabetical(shown, (b) => b.name)
   }, [bills, payments, kind, source?.billId])
   const linkedBillId = kind !== 'servico' && billOptions.some((b) => b.id === billId) ? billId : ''
   const linkedBill = bills.find((b) => b.id === linkedBillId)
+
+  /** "+ Nova conta": guarda o preenchido e abre o cadastro da conta; ao salvar, ela volta para cá já escolhida. */
+  function newBill() {
+    keepDraft({
+      path: here, savedAt: Date.now(), kind, personChoice, name, phone, email, tone, description, total, count, firstDue,
+      received, notes, billId, monthly, rateioCount, startMonth, endMonth,
+    })
+    navigate(`/contas/nova?voltar=${encodeURIComponent(here)}`)
+  }
+  const newBillButton = (
+    <button type="button" className="btn small new-bill-btn" onClick={newBill}>
+      + Nova conta
+    </button>
+  )
   const [error, setError] = useState<string | null>(null)
 
   const sortedPeople = useMemo(() => [...people].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')), [people])
@@ -425,11 +501,8 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
                 ))}
               </select>
             </label>
-            {billOptions.length === 0 && (
-              <p className="muted small-note">
-                Cadastre primeiro a conta em <Link to="/contas/nova">Nova conta</Link>: o rateio fica sempre ligado a ela.
-              </p>
-            )}
+            {billOptions.length === 0 && <p className="muted small-note">Cadastre a conta em “+ Nova conta”: o rateio fica sempre ligado a ela.</p>}
+            {newBillButton}
             {linkedBill && <p className="muted small-note">Vence todo dia {linkedBill.dueDay}, junto com a conta. O app mostra o seu gasto real: a conta menos a parte da pessoa.</p>}
           </>
         )}
@@ -443,8 +516,13 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
           />
         </label>
 
-        {kind === 'cartao' && billOptions.length === 0 && bills.length > 0 && (
-          <p className="muted small-note">Nenhuma conta a pagar com cartão de crédito para ligar. A forma de pagamento da conta precisa ser cartão.</p>
+        {kind === 'cartao' && billOptions.length === 0 && (
+          <>
+            {bills.length > 0 && (
+              <p className="muted small-note">Nenhuma conta a pagar com cartão de crédito para ligar. A forma de pagamento da conta precisa ser cartão.</p>
+            )}
+            {newBillButton}
+          </>
         )}
 
         {kind === 'cartao' && billOptions.length > 0 && (
@@ -465,6 +543,7 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
               Se este valor volta de uma conta que você paga (como a fatura do cartão), ligue as duas. O app mostra o seu gasto real: o
               que você pagou menos o que a pessoa devolve.
             </p>
+            {newBillButton}
           </>
         )}
 

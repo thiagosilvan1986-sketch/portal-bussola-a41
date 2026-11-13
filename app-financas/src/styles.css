@@ -2414,3 +2414,62 @@ button.heat-item:focus-visible {
   align-items: flex-start;
   gap: 2px;
 }
+
+/* Cadastro rápido dentro de uma lista (+ Nova categoria, + Nova forma de pagamento). */
+.quick-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+/* Numa linha de dois campos, o campo do item novo ocupa a linha inteira, logo abaixo dos dois. */
+.row > .quick-add {
+  display: contents;
+}
+.row > .quick-add > label {
+  justify-content: flex-end;
+}
+.row .quick-add-box {
+  grid-column: 1 / -1;
+  order: 1;
+}
+.quick-add-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+}
+.quick-add-actions {
+  display: flex;
+  gap: 8px;
+}
+.quick-add-actions .btn {
+  flex: 1;
+}
+.new-bill-btn {
+  align-self: flex-start;
+}
+
+/* Início: o que mostrar (Tudo | A pagar | A receber), filtros e as parcelas a receber na lista. */
+.home-side {
+  margin-top: 4px;
+}
+.home-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.home-filters > label:only-child {
+  grid-column: 1 / -1;
+}
+.row-card.row-recv {
+  border-left-color: var(--ok-text);
+}
+.row-card.row-recv.status-atrasada {
+  border-left-color: var(--danger);
+}
+.recv-amount {
+  color: var(--ok-text);
+}

@@ -1,7 +1,9 @@
 import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { HorizonPicker } from '../components/HorizonPicker'
 import { SortControl } from '../components/SortControl'
+import { useDeviceChoice } from '../data/devicePrefs'
 import { usePeople, useReceivables, useToday } from '../data/hooks'
 import { useSortChoice } from '../data/sortPrefs'
 import { PERSON_SORTS, PERSON_SORT_DEFAULT, sortPeopleBy } from '../domain/listSorts'
@@ -14,7 +16,10 @@ import {
   lastChargeText,
   kindOfTab,
   listPath,
+  HORIZONS,
+  horizonPhrase,
   ofKind,
+  scopeReceivables,
   summarizePerson,
 } from '../domain/receivables'
 import type { ReceivableKind } from '../domain/types'
@@ -42,18 +47,21 @@ export default function Receivables() {
   const kind: ReceivableKind = kindOfTab(params.get('aba'))
   const people = usePeople(uid)
   const receivables = useReceivables(uid)
+  // O resumo mostra o que falta no mês (padrão), até dezembro ou tudo; a escolha fica neste aparelho.
+  const [horizon, setHorizon] = useDeviceChoice('receber-periodo', HORIZONS, 'mes')
+  const scoped = useMemo(() => scopeReceivables(receivables.data, horizon, today), [receivables.data, horizon, today])
 
   // Só as pessoas com compra deste tipo. Contatos sem nenhuma compra ficam em Configurações > Contatos.
   const [personSort, setPersonSort] = useSortChoice('receber', PERSON_SORTS, PERSON_SORT_DEFAULT)
   const rows = useMemo(() => {
-    const mine = ofKind(receivables.data, kind)
+    const mine = ofKind(scoped, kind)
     const listed = people.data
       .filter((p) => mine.some((r) => r.personId === p.id))
       .map((p) => ({ person: p, summary: summarizePerson(mine.filter((r) => r.personId === p.id), today) }))
     return sortPeopleBy(listed, personSort)
-  }, [people.data, receivables.data, kind, today, personSort])
+  }, [people.data, scoped, kind, today, personSort])
 
-  const totals = useMemo(() => summarizePerson(ofKind(receivables.data, kind), today), [receivables.data, kind, today])
+  const totals = useMemo(() => summarizePerson(ofKind(scoped, kind), today), [scoped, kind, today])
   const forecast = useMemo(() => forecastByMonth(ofKind(receivables.data, kind), today), [receivables.data, kind, today])
   const overdueByKind = useMemo(
     () =>
@@ -106,15 +114,16 @@ export default function Receivables() {
         </p>
       )}
 
+      <HorizonPicker value={horizon} onChange={setHorizon} />
       <section className="summary" aria-label="Resumo do que falta receber">
         <div className="card summary-main tone-recv">
-          <span className="muted">Falta receber</span>
+          <span className="muted">Falta receber {horizonPhrase(horizon)}</span>
           <strong>{money(totals.remainingCents)}</strong>
           <span className="muted">
             {totals.purchaseCount === 0
               ? 'Nenhuma compra cadastrada'
               : totals.remainingCents === 0
-                ? 'Tudo recebido'
+                ? horizon === 'tudo' ? 'Tudo recebido' : `Nada a receber ${horizonPhrase(horizon)}`
                 : totals.purchaseCount === 1
                   ? kind === 'rateio' ? 'Em 1 rateio' : 'Em 1 compra parcelada'
                   : kind === 'rateio' ? `Em ${totals.purchaseCount} rateios` : `Em ${totals.purchaseCount} compras parceladas`}
@@ -127,7 +136,7 @@ export default function Receivables() {
           <strong>{money(totals.overdueCents)}</strong>
         </div>
         <div className="card tone-ok">
-          <span className="muted">Já recebido</span>
+          <span className="muted">Já recebido {horizon === 'tudo' ? '' : horizonPhrase(horizon)}</span>
           <strong>{money(totals.receivedCents)}</strong>
         </div>
       </section>
@@ -165,7 +174,9 @@ export default function Receivables() {
                     <span className="muted">
                       {summary.purchaseCount === 0
                         ? 'Sem compras'
-                        : done
+                        : done && horizon !== 'tudo'
+                          ? `Nada a receber ${horizonPhrase(horizon)}`
+                          : done
                           ? summary.purchaseCount === 1
                             ? '1 compra quitada'
                             : `${summary.purchaseCount} compras quitadas`
@@ -181,7 +192,8 @@ export default function Receivables() {
                     )}
                     {done && (
                       <span className="chip chip-paga">
-                        <span aria-hidden="true">✓ </span>Quitado
+                        <span aria-hidden="true">✓ </span>
+                        {horizon === 'tudo' ? 'Quitado' : 'Em dia'}
                       </span>
                     )}
                     {summary.remainingCents > 0 && lastChargeText(person.charges, today) && (
@@ -191,7 +203,7 @@ export default function Receivables() {
                   {summary.purchaseCount > 0 && (
                     <div className="row-side">
                       <strong>{money(summary.remainingCents)}</strong>
-                      <span className="muted">falta</span>
+                      <span className="muted">falta {horizonPhrase(horizon)}</span>
                     </div>
                   )}
                 </li>

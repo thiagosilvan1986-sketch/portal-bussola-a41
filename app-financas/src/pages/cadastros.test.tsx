@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FEATURES } from '../components/FeatureList'
 import { defaultRegistry, type Registry } from '../domain/registry'
@@ -415,12 +415,71 @@ describe('Nova conta usa os cadastros', () => {
     setup(reg, [bill({ supplier: 'Sabesp' })])
     renderAt('/contas/nova')
     const categories = within(screen.getByLabelText('Categoria')).getAllByRole('option').map((o) => o.textContent)
-    expect(categories[0]).toBe('Viagens')
-    expect(categories).toContain('Lazer')
+    // em ordem alfabética, com "Outros" e a opção de cadastrar por último
+    expect(categories[0]).toBe('Assinaturas')
+    expect(categories).toContain('Viagens')
+    expect(categories.slice(-2)).toEqual(['Outros', '+ Nova categoria'])
+    expect(categories.slice(0, -2)).toEqual(categories.slice(0, -2).sort((a, b) => a!.localeCompare(b!, 'pt-BR')))
     const payments = within(screen.getByLabelText('Forma de pagamento')).getAllByRole('option').map((o) => o.textContent)
-    expect(payments).toEqual(['Boleto', 'Débito automático', 'PIX', 'Cartão', 'Transferência'])
+    expect(payments).toEqual(['Boleto', 'Cartão', 'Débito automático', 'PIX', 'Transferência', '+ Nova forma de pagamento'])
     const options = Array.from(document.querySelectorAll('#bill-suppliers option')).map((o) => o.getAttribute('value'))
     expect(options).toEqual(['Enel', 'Sabesp'])
+  })
+
+  it('na Nova conta, "+ Nova categoria" e "+ Nova forma de pagamento" cadastram ali mesmo e já escolhem o item novo', () => {
+    setup(defaultRegistry(), [])
+    renderAt('/contas/nova')
+    fireEvent.change(screen.getByLabelText('Categoria'), { target: { value: '__novo' } })
+    fireEvent.change(screen.getByLabelText('Nome da nova categoria'), { target: { value: 'Academia' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar' }))
+    expect((screen.getByLabelText('Categoria') as HTMLSelectElement).value).toBe('Academia')
+    const saved = store.saveRegistry.mock.calls.at(-1)![1]
+    expect(saved.categories).toContain('Academia')
+
+    fireEvent.change(screen.getByLabelText('Forma de pagamento'), { target: { value: '__novo' } })
+    // nome repetido avisa e não grava
+    fireEvent.change(screen.getByLabelText('Nome da nova forma'), { target: { value: 'pix' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar' }))
+    expect(screen.getByRole('alert').textContent).toMatch(/já existe/i)
+    fireEvent.change(screen.getByLabelText('Nome da nova forma'), { target: { value: 'Cartão Nubank' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar' }))
+    const pay = screen.getByLabelText('Forma de pagamento') as HTMLSelectElement
+    expect(pay.selectedOptions[0].textContent).toBe('Cartão Nubank')
+    // Cancelar fecha o campo e mantém a escolha
+    fireEvent.change(pay, { target: { value: '__novo' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByLabelText('Nome da nova forma')).toBeNull()
+  })
+
+  it('vindo do rateio ("+ Nova conta"), Cancelar e Salvar voltam para lá, com a conta nova no endereço', async () => {
+    setup(defaultRegistry(), [])
+    let where = ''
+    function Where() {
+      const loc = useLocation()
+      where = loc.pathname + loc.search
+      return null
+    }
+    render(
+      <MemoryRouter initialEntries={['/contas/nova?voltar=%2Freceber%2Fnova%3Ftipo%3Drateio']}>
+        <AppRoutes />
+        <Where />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: /Cancelar/ }).getAttribute('href')).toBe('/receber/nova?tipo=rateio')
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Aluguel' } })
+    fireEvent.change(screen.getByLabelText(/Valor/), { target: { value: '1.908,00' } })
+    fireEvent.change(screen.getByLabelText('Dia do vencimento'), { target: { value: '10' } })
+    fireEvent.submit(screen.getByRole('button', { name: 'Salvar' }).closest('form')!)
+    await waitFor(() => expect(where).toBe('/receber/nova?tipo=rateio&conta=new-id'))
+    cleanup()
+
+    // endereço de volta fora de A receber é ignorado
+    render(
+      <MemoryRouter initialEntries={['/contas/nova?voltar=https%3A%2F%2Fexemplo.com']}>
+        <AppRoutes />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link', { name: /Cancelar/ }).getAttribute('href')).toBe('/contas')
   })
 
   it('ao editar, não mostra atalhos e mantém a categoria e a forma da conta mesmo que tenham saído da lista', () => {

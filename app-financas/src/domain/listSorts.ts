@@ -27,8 +27,8 @@ const byDate = <T>(get: (x: T) => IsoDate | null): SortSpec<T> => ({
 export type EntrySortKey = 'vencimento' | 'nome' | 'valor'
 
 export const ENTRY_SORTS: readonly SortOption<EntrySortKey>[] = [
-  { key: 'vencimento', label: 'Vencimento', dir: 'asc' },
   { key: 'nome', label: 'Nome', dir: 'asc' },
+  { key: 'vencimento', label: 'Vencimento', dir: 'asc' },
   { key: 'valor', label: 'Valor', dir: 'desc' },
 ]
 export const ENTRY_SORT_DEFAULT = choiceOf(ENTRY_SORTS[0])
@@ -81,8 +81,8 @@ export interface PersonRow {
 export type PersonSortKey = 'situacao' | 'nome' | 'valor' | 'vencimento'
 
 export const PERSON_SORTS: readonly SortOption<PersonSortKey>[] = [
-  { key: 'situacao', label: 'Situação (atrasados primeiro)', dir: 'asc', directional: false },
   { key: 'nome', label: 'Nome', dir: 'asc' },
+  { key: 'situacao', label: 'Situação (atrasados primeiro)', dir: 'asc', directional: false },
   { key: 'valor', label: 'Valor a receber', dir: 'desc' },
   { key: 'vencimento', label: 'Próximo vencimento', dir: 'asc' },
 ]
@@ -110,8 +110,8 @@ export function sortPeopleBy(rows: readonly PersonRow[], choice: SortChoice<Pers
 export type PurchaseSortKey = 'situacao' | 'nome' | 'valor' | 'vencimento'
 
 export const PURCHASE_SORTS: readonly SortOption<PurchaseSortKey>[] = [
-  { key: 'situacao', label: 'Situação (com saldo primeiro)', dir: 'asc', directional: false },
   { key: 'nome', label: 'Nome da compra', dir: 'asc' },
+  { key: 'situacao', label: 'Situação (com saldo primeiro)', dir: 'asc', directional: false },
   { key: 'valor', label: 'Valor da compra', dir: 'desc' },
   { key: 'vencimento', label: 'Próxima parcela', dir: 'asc' },
 ]
@@ -138,8 +138,8 @@ export function sortPurchasesBy(receivables: readonly Receivable[], choice: Sort
 export type DebtorSortKey = 'valor' | 'nome'
 
 export const DEBTOR_SORTS: readonly SortOption<DebtorSortKey>[] = [
-  { key: 'valor', label: 'Valor em aberto', dir: 'desc' },
   { key: 'nome', label: 'Nome', dir: 'asc' },
+  { key: 'valor', label: 'Valor em aberto', dir: 'desc' },
 ]
 export const DEBTOR_SORT_DEFAULT = choiceOf(DEBTOR_SORTS[0])
 
@@ -154,8 +154,8 @@ export function sortDebtorsBy<T extends { name: string; openCents: number }>(row
 export type SliceSortKey = 'valor' | 'nome'
 
 export const SLICE_SORTS: readonly SortOption<SliceSortKey>[] = [
-  { key: 'valor', label: 'Valor', dir: 'desc' },
   { key: 'nome', label: 'Nome', dir: 'asc' },
+  { key: 'valor', label: 'Valor', dir: 'desc' },
 ]
 export const SLICE_SORT_DEFAULT = choiceOf(SLICE_SORTS[0])
 
@@ -210,8 +210,8 @@ export function sortMonthsBy<T extends { competence: string; payTotalCents: numb
 export type NameSortKey = 'ordem' | 'nome'
 
 export const NAME_SORTS: readonly SortOption<NameSortKey>[] = [
-  { key: 'ordem', label: 'Ordem de cadastro', dir: 'asc', directional: false },
   { key: 'nome', label: 'Nome', dir: 'asc' },
+  { key: 'ordem', label: 'Ordem de cadastro', dir: 'asc', directional: false },
 ]
 export const NAME_SORT_DEFAULT = choiceOf(NAME_SORTS[0])
 
@@ -226,8 +226,8 @@ export function sortNamesBy<T extends { label: string }>(items: readonly T[], ch
 export type TemplateSortKey = 'ordem' | 'nome' | 'valor' | 'dia'
 
 export const TEMPLATE_SORTS: readonly SortOption<TemplateSortKey>[] = [
-  { key: 'ordem', label: 'Ordem de cadastro', dir: 'asc', directional: false },
   { key: 'nome', label: 'Nome', dir: 'asc' },
+  { key: 'ordem', label: 'Ordem de cadastro', dir: 'asc', directional: false },
   { key: 'valor', label: 'Valor', dir: 'desc' },
   { key: 'dia', label: 'Dia do vencimento', dir: 'asc' },
 ]

@@ -187,10 +187,11 @@ describe('Relatórios', () => {
     renderReports()
     const cats = screen.getByRole('region', { name: 'Contas a pagar por categoria' })
     const items = within(cats).getAllByRole('listitem').map((li) => flat(li.textContent))
-    expect(items[0]).toContain('Moradia')
-    expect(items[0]).toContain('R$ 3.000,00')
-    expect(items[0]).toContain('83%')
-    expect(items[1]).toContain('Contas de consumo')
+    // em ordem alfabética (padrão de todas as listas)
+    expect(items[0]).toContain('Contas de consumo')
+    expect(items[1]).toContain('Moradia')
+    expect(items[1]).toContain('R$ 3.000,00')
+    expect(items[1]).toContain('83%')
     const debtors = screen.getByRole('region', { name: 'Quem mais deve' })
     expect(within(debtors).getByRole('link').getAttribute('href')).toBe('/receber/pessoa/p1')
     expect(flat(debtors.textContent)).toContain('Ana Souza')
@@ -500,14 +501,14 @@ describe('Relatórios: ordenação', () => {
     hooks.useReceivables.mockReturnValue(live([tenis, mochila]))
   })
 
-  it('"Quem mais deve" abre pelo maior valor em aberto e ordena por nome', () => {
+  it('"Quem mais deve" abre por nome (A–Z) e ordena pelo maior valor em aberto', () => {
     renderReports()
-    expect(debtorNames()).toEqual(['Bruno Lima', 'Ana Souza'])
-    const select = group('Ordenação de quem mais deve').getByLabelText('Ordenar por') as HTMLSelectElement
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Valor em aberto', 'Nome'])
-    pick('Ordenação de quem mais deve', 'Nome')
     expect(debtorNames()).toEqual(['Ana Souza', 'Bruno Lima'])
+    const select = group('Ordenação de quem mais deve').getByLabelText('Ordenar por') as HTMLSelectElement
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['Nome', 'Valor em aberto'])
     fireEvent.click(group('Ordenação de quem mais deve').getByRole('button'))
+    expect(debtorNames()).toEqual(['Bruno Lima', 'Ana Souza'])
+    pick('Ordenação de quem mais deve', 'Valor em aberto')
     expect(debtorNames()).toEqual(['Bruno Lima', 'Ana Souza'])
   })
 

@@ -12,7 +12,10 @@ import { addMonths, competenceOf, formatCompetence } from '../domain/dates'
 import { receivablesOfBill } from '../domain/linked'
 import { centsToInput, parseBRLToCents } from '../domain/money'
 import { MoneyInput } from '../components/MoneyInput'
-import { FALLBACK_CATEGORY, MAX_TEMPLATE_NAME, availableTemplates, copyName, suggestCategory, supplierSuggestions, type Template } from '../domain/registry'
+import { QuickAddSelect } from '../components/QuickAddSelect'
+import { createCategory, createPayment } from '../data/quickAdd'
+import { alphabetical } from '../domain/text'
+import { isFallbackCategory, FALLBACK_CATEGORY, MAX_TEMPLATE_NAME, availableTemplates, copyName, suggestCategory, supplierSuggestions, type Template } from '../domain/registry'
 import type { Bill, PaymentMethod, Recurrence, ValueType } from '../domain/types'
 
 export default function BillForm() {
@@ -44,8 +47,15 @@ export default function BillForm() {
   return <Editor key={bill.id} initial={bill} bills={bills.data} />
 }
 
+/** Veio do cadastro de A receber ("+ Nova conta"): ao salvar ou cancelar, volta para lá. Só aceita caminhos de A receber. */
+function returnPath(raw: string | null): string | null {
+  return raw && raw.startsWith('/receber/') ? raw : null
+}
+
 function Editor({ initial, seed = null, bills }: { initial: Bill | null; seed?: Bill | null; bills: Bill[] }) {
   const navigate = useNavigate()
+  const [search] = useSearchParams()
+  const back = initial ? null : returnPath(search.get('voltar'))
   const uid = useAuth().user!.uid
   const today = useToday()
   const registry = useRegistry(uid).data
@@ -154,7 +164,7 @@ function Editor({ initial, seed = null, bills }: { initial: Bill | null; seed?: 
     setError(null)
     setSaving(true)
     try {
-      await saveBill(
+      const savedId = await saveBill(
         uid,
         {
           id: initial?.id,
@@ -174,7 +184,8 @@ function Editor({ initial, seed = null, bills }: { initial: Bill | null; seed?: 
         today,
         initial ? {} : { paidInstallments: paid },
       )
-      navigate('/contas')
+      if (back) navigate(`${back}${back.includes('?') ? '&' : '?'}conta=${encodeURIComponent(savedId)}`)
+      else navigate('/contas')
     } catch (e) {
       console.error(e)
       setError('Não foi possível salvar. Tente de novo.')
@@ -210,7 +221,7 @@ function Editor({ initial, seed = null, bills }: { initial: Bill | null; seed?: 
     <main className="page">
       <header className="page-head">
         <h1>{initial ? 'Editar conta' : 'Nova conta'}</h1>
-        <Link className="btn primary cancel-btn" to="/contas">
+        <Link className="btn primary cancel-btn" to={back ?? '/contas'}>
           <span aria-hidden="true">✕</span> Cancelar
         </Link>
       </header>
@@ -313,31 +324,30 @@ function Editor({ initial, seed = null, bills }: { initial: Bill | null; seed?: 
         )}
 
         <div className="row">
-          <label>
-            Categoria
-            <select
-              value={category}
-              onChange={(e) => {
-                setCategory(e.target.value)
-                setCategoryTouched(true)
-                setCategorySuggested(false)
-              }}
-            >
-              {categories.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Forma de pagamento
-            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}>
-              {payments.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <QuickAddSelect
+            label="Categoria"
+            value={category}
+            options={alphabetical(categories, (c) => c, isFallbackCategory).map((c) => ({ value: c, label: c }))}
+            onChange={(c) => {
+              setCategory(c)
+              setCategoryTouched(true)
+              setCategorySuggested(false)
+            }}
+            newLabel="+ Nova categoria"
+            inputLabel="Nome da nova categoria"
+            placeholder="Ex.: Academia"
+            onCreate={(name) => createCategory(uid, registry, name)}
+          />
+          <QuickAddSelect
+            label="Forma de pagamento"
+            value={paymentMethod}
+            options={alphabetical(payments, (p) => p.label).map((p) => ({ value: p.id, label: p.label }))}
+            onChange={(v) => setPaymentMethod(v as PaymentMethod)}
+            newLabel="+ Nova forma de pagamento"
+            inputLabel="Nome da nova forma"
+            placeholder="Ex.: Cartão Nubank"
+            onCreate={(name) => createPayment(uid, registry, name)}
+          />
         </div>
         {categorySuggested && <p className="muted small-note">Categoria sugerida pelo nome. Se não for essa, é só trocar.</p>}
 

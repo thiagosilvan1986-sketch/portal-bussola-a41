@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useSortChoice } from '../data/sortPrefs'
 import { NAME_SORTS, NAME_SORT_DEFAULT, sortNamesBy } from '../domain/listSorts'
 import { copyName } from '../domain/registry'
+import { alphabetical } from '../domain/text'
 import { CopyButton } from './CopyButton'
 import { SortControl } from './SortControl'
 
@@ -172,7 +173,7 @@ export function NameListEditor(props: Props) {
                         <label>
                           {item.used === 1 ? 'A conta que usa passa' : `As ${item.used} contas que usam passam`} para:
                           <select value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
-                            {others.map((o) => (
+                            {alphabetical(others, (o) => o.label).map((o) => (
                               <option key={o.key} value={o.key}>
                                 {o.label}
                               </option>

@@ -5,7 +5,9 @@ import { ChargeSheet } from '../components/ChargeSheet'
 import { ContactImport } from '../components/ContactImport'
 import { CopyButton } from '../components/CopyButton'
 import { DeleteButton } from '../components/DeleteButton'
+import { HorizonPicker } from '../components/HorizonPicker'
 import { SortControl } from '../components/SortControl'
+import { useDeviceChoice } from '../data/devicePrefs'
 import { StatusChip } from '../components/StatusChip'
 import { useBills, usePeople, useReceivables, useToday } from '../data/hooks'
 import { useSortChoice } from '../data/sortPrefs'
@@ -24,7 +26,12 @@ import {
   formatPhone,
   installmentRemaining,
   installmentStatus,
+  HORIZONS,
+  type Horizon,
+  horizonPhrase,
   isOpenEnded,
+  scopeReceivable,
+  scopeReceivables,
   isSettled,
   isValidEmail,
   isValidPhone,
@@ -88,6 +95,8 @@ function Detail({
   const [editingContact, setEditingContact] = useState(false)
   const [charging, setCharging] = useState<Receivable[] | null>(null)
   const [purchaseSort, setPurchaseSort] = useSortChoice('pessoa', PURCHASE_SORTS, PURCHASE_SORT_DEFAULT)
+  // O mesmo período do resumo da lista A receber (Mês, Ano ou Tudo), guardado neste aparelho.
+  const [horizon, setHorizon] = useDeviceChoice('receber-periodo', HORIZONS, 'mes')
 
   const kinds = RECEIVABLE_KINDS.filter((k) => ofKind(receivables, k).length > 0)
   const first = person.name.split(/\s+/)[0]
@@ -104,6 +113,8 @@ function Detail({
       <Contact uid={uid} person={person} editing={editingContact} setEditing={setEditingContact} />
 
       <ChargeHistory uid={uid} person={person} today={today} />
+
+      {receivables.length > 0 && <HorizonPicker value={horizon} onChange={setHorizon} />}
 
       {receivables.length > 1 && (
         <SortControl label="Ordenação das compras" options={PURCHASE_SORTS} value={purchaseSort} onChange={setPurchaseSort} />
@@ -139,6 +150,7 @@ function Detail({
             showNewPurchase={idx === 0}
             receivables={ofKind(receivables, kind)}
             sort={purchaseSort}
+            horizon={horizon}
             billNames={billNames}
             onCharge={setCharging}
           />
@@ -198,6 +210,7 @@ function KindSection({
   showNewPurchase,
   receivables,
   sort,
+  horizon,
   billNames,
   onCharge,
 }: {
@@ -210,12 +223,13 @@ function KindSection({
   showNewPurchase: boolean
   receivables: Receivable[]
   sort: SortChoice<PurchaseSortKey>
+  horizon: Horizon
   billNames: ReadonlyMap<string, string>
   onCharge: (list: Receivable[]) => void
 }) {
   const money = useMoney()
   const sorted = useMemo(() => sortPurchasesBy(receivables, sort, today), [receivables, sort, today])
-  const summary = summarizePerson(receivables, today)
+  const summary = summarizePerson(scopeReceivables(receivables, horizon, today), today)
   const title = KIND_INFO[kind].title
 
   return (
@@ -231,18 +245,18 @@ function KindSection({
 
       <div className="summary" role="group" aria-label={`Resumo: ${title}`}>
         <div className="card summary-main tone-recv">
-          <span className="muted">Falta receber</span>
+          <span className="muted">Falta receber {horizonPhrase(horizon)}</span>
           <strong>{money(summary.remainingCents)}</strong>
           <span className="muted">
             {summary.remainingCents === 0
-              ? 'Tudo recebido'
+              ? horizon === 'tudo' ? 'Tudo recebido' : `Nada a receber ${horizonPhrase(horizon)}`
               : summary.nextDueDate
                 ? `Próxima parcela em ${formatDateBR(summary.nextDueDate)}`
                 : ''}
           </span>
         </div>
         <div className="card tone-ok">
-          <span className="muted">Já recebido</span>
+          <span className="muted">Já recebido {horizon === 'tudo' ? '' : horizonPhrase(horizon)}</span>
           <strong>{money(summary.receivedCents)}</strong>
         </div>
         <div className={`card ${summary.overdueCents > 0 ? 'tone-danger' : 'tone-neutral'}`}>
@@ -423,6 +437,8 @@ function Purchase({
   const s = summarizeReceivable(receivable, today)
   const pct = s.count === 0 ? 0 : Math.round((s.settledCount / s.count) * 100)
   const openEnded = isOpenEnded(receivable)
+  // No rateio sem fim, o que importa é o mês: o total cresceria sem parar.
+  const monthLeft = openEnded ? summarizeReceivable(scopeReceivable(receivable, 'mes', today), today).remainingCents : 0
   return (
     <section className="card stack" aria-label={receivable.description}>
       <div className="sheet-head">
@@ -431,7 +447,7 @@ function Purchase({
           {openEnded ? (
             <p className="muted">
               {receivable.endMonth ? `Encerrado em ${formatCompetence(receivable.endMonth)}` : 'Todo mês, sem fim'}
-              {s.remainingCents > 0 ? ` · faltam ${money(s.remainingCents)}` : ' · tudo recebido'}
+              {monthLeft > 0 ? ` · falta ${money(monthLeft)} este mês` : ' · em dia'}
             </p>
           ) : (
             <p className="muted">

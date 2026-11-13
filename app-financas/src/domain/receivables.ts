@@ -675,3 +675,38 @@ export function chargeMessage(person: Person, receivables: Receivable[], today: 
     text: `${hello} ${tone.remind} das próximas parcelas:\n${lines.join('\n')}\n${tone.thanks}`,
   }
 }
+
+/* ---------- Período do resumo: Mês | Ano | Tudo ---------- */
+
+export type Horizon = 'mes' | 'ano' | 'tudo'
+export const HORIZONS: Horizon[] = ['mes', 'ano', 'tudo']
+export const HORIZON_LABEL: Record<Horizon, string> = { mes: 'Mês', ano: 'Ano', tudo: 'Tudo' }
+
+/**
+ * Recorta as parcelas para o resumo:
+ * - Mês: as do mês atual (recebidas ou não) e as atrasadas de antes;
+ * - Ano: do mês atual até dezembro, mais as atrasadas;
+ * - Tudo: todas as parcelas.
+ * O rateio sem fim não tem total: em Ano e Tudo ele vai até dezembro.
+ */
+export function scopeReceivable(r: Receivable, horizon: Horizon, today: IsoDate): Receivable {
+  const thisMonth = competenceOf(today)
+  const december = `${thisMonth.slice(0, 4)}-12`
+  const full = horizon === 'mes' ? r : extendRecurring(r, december)
+  if (horizon === 'tudo') return full
+  const last = horizon === 'mes' ? thisMonth : december
+  const installments = full.installments.filter((i) => {
+    const c = competenceOf(i.dueDate)
+    return (c >= thisMonth && c <= last) || (c < thisMonth && !isSettled(i))
+  })
+  return { ...full, installments }
+}
+
+export function scopeReceivables(list: Receivable[], horizon: Horizon, today: IsoDate): Receivable[] {
+  return list.map((r) => scopeReceivable(r, horizon, today))
+}
+
+/** "neste mês", "até dezembro", "no total" — para os textos do resumo. */
+export function horizonPhrase(h: Horizon): string {
+  return h === 'mes' ? 'neste mês' : h === 'ano' ? 'até dezembro' : 'no total'
+}

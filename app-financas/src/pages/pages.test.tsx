@@ -53,6 +53,7 @@ const store = vi.hoisted(() => ({
   payEntry: vi.fn(),
   saveBill: vi.fn(),
   undoPayment: vi.fn(),
+  setInstallmentPayment: vi.fn(),
   updateEntryDetails: vi.fn(),
 }))
 
@@ -79,6 +80,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  window.localStorage.removeItem('contas-em-dia:escolha:inicio-lado')
+  window.localStorage.removeItem('contas-em-dia:escolha:inicio-situacao')
 })
 
 const text = (el: Element | null) => (el?.textContent ?? '').replace(/ /g, ' ')
@@ -144,13 +147,74 @@ describe('Início', () => {
       </MemoryRouter>,
     )
 
+  describe('toda a movimentação do mês', () => {
+    const ana = { id: 'p1', name: 'Ana Souza', phone: '', email: '', charges: [] }
+    // Tênis: 3 × R$ 100,00 a partir de 15/10; a de novembro vence no dia 15
+    const tenis: Receivable = {
+      id: 'r1', personId: 'p1', kind: 'cartao', description: 'Tênis', totalCents: 30000, installmentCount: 3,
+      firstDueDate: '2026-10-15', installments: buildInstallments(30000, 3, '2026-10-15'), notes: '',
+    }
+    beforeEach(() => {
+      hooks.usePeople.mockReturnValue({ data: [ana], ready: true, error: null })
+      hooks.useReceivables.mockReturnValue({ data: [tenis], ready: true, error: null })
+      store.setInstallmentPayment.mockResolvedValue(undefined)
+    })
+    const rows = () => Array.from(document.querySelectorAll('ul.list > li .row-title')).map((t) => t.textContent)
+
+    it('abre em Tudo: contas e parcelas a receber do mês juntas, em ordem alfabética, e o resumo com o saldo', () => {
+      renderHome()
+      const sides = screen.getByRole('group', { name: 'O que mostrar' })
+      expect(within(sides).getByRole('button', { name: 'Tudo' }).getAttribute('aria-pressed')).toBe('true')
+      expect(rows()).toEqual(['Ana Souza · Tênis 2/3', 'Condomínio', 'Energia', 'Internet'])
+      const t = text(screen.getByLabelText('Resumo do mês'))
+      expect(t).toContain('Falta pagar')
+      expect(t).toContain('Falta receber')
+      expect(t).toContain('R$ 100,00')
+      // entra 100,00; sai 829,90: falta 729,90
+      expect(t).toContain('Saldo do mês')
+      expect(t).toContain('▼ Saldo do mês')
+      expect(t).toContain('R$ 729,90')
+      expect(t).toContain('Falta: sai mais do que entra')
+    })
+
+    it('A receber mostra só as parcelas, com resumo próprio; a escolha fica guardada', () => {
+      renderHome()
+      fireEvent.click(within(screen.getByRole('group', { name: 'O que mostrar' })).getByRole('button', { name: 'A receber' }))
+      expect(rows()).toEqual(['Ana Souza · Tênis 2/3'])
+      expect(text(screen.getByLabelText('Resumo do mês'))).toContain('1 parcela pendente')
+      expect(screen.queryByLabelText('Categoria')).toBeNull()
+      expect(window.localStorage.getItem('contas-em-dia:escolha:inicio-lado')).toBe('receber')
+    })
+
+    it('filtra pela situação e pela categoria', () => {
+      renderHome()
+      fireEvent.change(screen.getByLabelText('Situação'), { target: { value: 'atrasadas' } })
+      expect(rows()).toEqual(['Energia'])
+      fireEvent.change(screen.getByLabelText('Situação'), { target: { value: 'quitadas' } })
+      expect(rows()).toEqual(['Condomínio'])
+      fireEvent.change(screen.getByLabelText('Situação'), { target: { value: 'todas' } })
+      fireEvent.change(screen.getByLabelText('Categoria'), { target: { value: 'Contas de consumo' } })
+      expect(rows()).toEqual(['Condomínio', 'Energia', 'Internet'])
+    })
+
+    it('tocar na parcela abre o detalhe para dar baixa; o botão Recebi dá baixa direto', () => {
+      renderHome()
+      fireEvent.click(screen.getByRole('button', { name: 'Recebi Ana Souza · Tênis 2/3' }))
+      expect(store.setInstallmentPayment.mock.calls[0].slice(2)).toEqual([2, { paidAt: TODAY, paidAmountCents: 10000 }])
+      fireEvent.click(screen.getByText('Ana Souza · Tênis 2/3'))
+      const sheet = screen.getByRole('dialog', { name: 'Ana Souza · Tênis' })
+      expect(within(sheet).getByRole('button', { name: 'Marcar como recebida' })).toBeTruthy()
+      expect(within(sheet).getByRole('link', { name: 'Ver pessoa e compra' }).getAttribute('href')).toBe('/receber/pessoa/p1')
+    })
+  })
+
   it('mostra o resumo do mês e o aviso de atrasada', () => {
     renderHome()
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('novembro de 2026')
 
-    const summary = screen.getByLabelText('Resumo do mês')
-    const t = text(summary)
-    // pendentes: Energia 200,00 (atrasada) + Internet 129,90 = 329,90; pago 500,00; total 829,90
+    // Em "A pagar": pendentes Energia 200,00 (atrasada) + Internet 129,90 = 329,90; pago 500,00; total 829,90
+    fireEvent.click(within(screen.getByRole('group', { name: 'O que mostrar' })).getByRole('button', { name: 'A pagar' }))
+    const t = text(screen.getByLabelText('Resumo do mês'))
     expect(t).toContain('R$ 329,90')
     expect(t).toContain('R$ 500,00')
     expect(t).toContain('R$ 829,90')

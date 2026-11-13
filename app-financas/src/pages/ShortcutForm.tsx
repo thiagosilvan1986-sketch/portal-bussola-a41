@@ -10,6 +10,10 @@ import { settleWithin } from '../data/wait'
 import { MAX_BILL_INSTALLMENTS, RECURRENCE_LABEL } from '../domain/bills'
 import { centsToInput, parseBRLToCents } from '../domain/money'
 import { MoneyInput } from '../components/MoneyInput'
+import { alphabetical } from '../domain/text'
+import { isFallbackCategory } from '../domain/registry'
+import { QuickAddSelect } from '../components/QuickAddSelect'
+import { createCategory, createPayment } from '../data/quickAdd'
 import {
   FALLBACK_CATEGORY,
   MAX_TEMPLATE_NAME,
@@ -167,16 +171,16 @@ function Editor({
               ))}
             </select>
           </label>
-          <label>
-            Forma de pagamento
-            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-              {reg.payments.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <QuickAddSelect
+            label="Forma de pagamento"
+            value={paymentMethod}
+            options={alphabetical(reg.payments, (p) => p.label).map((p) => ({ value: p.id, label: p.label }))}
+            onChange={setPaymentMethod}
+            newLabel="+ Nova forma de pagamento"
+            inputLabel="Nome da nova forma"
+            placeholder="Ex.: Cartão Nubank"
+            onCreate={(name) => createPayment(uid, reg, name)}
+          />
         </div>
 
         <label>
@@ -185,14 +189,16 @@ function Editor({
         </label>
         <p className="muted small-note">Útil para financiamento, consórcio ou empréstimo. Deixe em branco se a conta não tem fim.</p>
 
-        <label>
-          Categoria
-          <select value={category} onChange={(e) => setCategory(e.target.value)}>
-            {reg.categories.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-        </label>
+        <QuickAddSelect
+          label="Categoria"
+          value={category}
+          options={alphabetical(reg.categories, (c) => c, isFallbackCategory).map((c) => ({ value: c, label: c }))}
+          onChange={setCategory}
+          newLabel="+ Nova categoria"
+          inputLabel="Nome da nova categoria"
+          placeholder="Ex.: Academia"
+          onCreate={(name) => createCategory(uid, reg, name)}
+        />
 
         <label>
           Fornecedor (opcional)

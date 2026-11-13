@@ -3,6 +3,7 @@ import { buildEntry } from './bills'
 import { amountDue, isPending, remainingCents, sortEntries } from './entries'
 import {
   BILL_SORT_DEFAULT,
+  CONTACT_SORT_DEFAULT,
   DEBTOR_SORT_DEFAULT,
   ENTRY_SORT_DEFAULT,
   MONTH_SORT_DEFAULT,
@@ -57,8 +58,8 @@ describe('Início e contas da categoria (lançamentos)', () => {
   const base = sortEntries(entries)
   const names = (list: typeof entries) => list.map((e) => e.billName)
 
-  it('o padrão é a ordem de sempre: vencimento e, no empate, nome', () => {
-    expect(names(sortEntriesBy(base, ENTRY_SORT_DEFAULT))).toEqual(names(base))
+  it('por vencimento: e, no empate, nome', () => {
+    expect(names(sortEntriesBy(base, { key: 'vencimento', dir: 'asc' }))).toEqual(names(base))
     expect(names(base)).toEqual(['Condomínio', 'Água', 'Energia', 'Internet'])
   })
 
@@ -135,10 +136,10 @@ describe('A receber (pessoas)', () => {
   ]
   const names = (list: PersonRow[]) => list.map((r) => r.person.name)
 
-  it('o padrão é a ordem de sempre: atrasados, quem ainda deve, maior saldo, nome', () => {
+  it('pela situação: atrasados, quem ainda deve, maior saldo, nome', () => {
     const old = [...rows].sort(comparePeopleBySituation)
-    expect(names(sortPeopleBy(rows, PERSON_SORT_DEFAULT))).toEqual(names(old))
-    expect(names(sortPeopleBy(rows, PERSON_SORT_DEFAULT))).toEqual(['Ana', 'Eva', 'Carla', 'Bruno', 'Davi'])
+    expect(names(sortPeopleBy(rows, { key: 'situacao', dir: 'asc' }))).toEqual(names(old))
+    expect(names(sortPeopleBy(rows, { key: 'situacao', dir: 'asc' }))).toEqual(['Ana', 'Eva', 'Carla', 'Bruno', 'Davi'])
   })
 
   it('por nome, nos dois sentidos', () => {
@@ -177,8 +178,8 @@ describe('Pessoa (compras)', () => {
   ]
   const names = (rs: Receivable[]) => rs.map((x) => x.description)
 
-  it('o padrão é a ordem de sempre: com saldo primeiro, pela próxima parcela', () => {
-    expect(names(sortPurchasesBy(list, PURCHASE_SORT_DEFAULT, TODAY))).toEqual(['Geladeira', 'Tênis', 'Celular', 'Bicicleta'])
+  it('pela situação: com saldo primeiro, pela próxima parcela', () => {
+    expect(names(sortPurchasesBy(list, { key: 'situacao', dir: 'asc' }, TODAY))).toEqual(['Geladeira', 'Tênis', 'Celular', 'Bicicleta'])
   })
 
   it('por nome, valor e próxima parcela', () => {
@@ -210,7 +211,7 @@ describe('Relatórios', () => {
       { category: OTHER_CATEGORIES, totalCents: 70000 },
     ]
     const names = (c: Parameters<typeof sortSlicesBy>[1]) => sortSlicesBy(slices, c).map((s) => s.category)
-    expect(names(SLICE_SORT_DEFAULT)).toEqual(['Moradia', 'Lazer', 'Saúde', OTHER_CATEGORIES])
+    expect(names({ key: 'valor', dir: 'desc' })).toEqual(['Moradia', 'Lazer', 'Saúde', OTHER_CATEGORIES])
     expect(names({ key: 'valor', dir: 'asc' })).toEqual(['Saúde', 'Lazer', 'Moradia', OTHER_CATEGORIES])
     expect(names({ key: 'nome', dir: 'asc' })).toEqual(['Lazer', 'Moradia', 'Saúde', OTHER_CATEGORIES])
     expect(names({ key: 'nome', dir: 'desc' })).toEqual(['Saúde', 'Moradia', 'Lazer', OTHER_CATEGORIES])
@@ -241,9 +242,9 @@ describe('Relatórios', () => {
 })
 
 describe('Cadastros', () => {
-  it('categorias, pagamentos e fornecedores: ordem de cadastro (padrão) ou por nome', () => {
+  it('categorias, pagamentos e fornecedores: ordem de cadastro ou por nome (padrão)', () => {
     const items = [{ label: 'Viagens' }, { label: 'Água' }, { label: 'Moradia' }]
-    expect(sortNamesBy(items, NAME_SORT_DEFAULT).map((i) => i.label)).toEqual(['Viagens', 'Água', 'Moradia'])
+    expect(sortNamesBy(items, { key: 'ordem', dir: 'asc' }).map((i) => i.label)).toEqual(['Viagens', 'Água', 'Moradia'])
     expect(sortNamesBy(items, { key: 'nome', dir: 'asc' }).map((i) => i.label)).toEqual(['Água', 'Moradia', 'Viagens'])
     expect(sortNamesBy(items, { key: 'nome', dir: 'desc' }).map((i) => i.label)).toEqual(['Viagens', 'Moradia', 'Água'])
   })
@@ -256,11 +257,19 @@ describe('Cadastros', () => {
       { name: 'Condomínio', amountCents: 50000, dueDay: null },
     ]
     const names = (c: Parameters<typeof sortTemplatesBy>[1]) => sortTemplatesBy(templates, c).map((t) => t.name)
-    expect(names(TEMPLATE_SORT_DEFAULT)).toEqual(['Seguro', 'Academia', 'Internet', 'Condomínio'])
+    expect(names({ key: 'ordem', dir: 'asc' })).toEqual(['Seguro', 'Academia', 'Internet', 'Condomínio'])
     expect(names({ key: 'nome', dir: 'asc' })).toEqual(['Academia', 'Condomínio', 'Internet', 'Seguro'])
     expect(names({ key: 'valor', dir: 'desc' })).toEqual(['Condomínio', 'Seguro', 'Internet', 'Academia'])
     expect(names({ key: 'valor', dir: 'asc' })).toEqual(['Internet', 'Seguro', 'Condomínio', 'Academia'])
     expect(names({ key: 'dia', dir: 'asc' })).toEqual(['Internet', 'Seguro', 'Academia', 'Condomínio'])
     expect(names({ key: 'dia', dir: 'desc' })).toEqual(['Seguro', 'Internet', 'Academia', 'Condomínio'])
+  })
+})
+
+describe('ordem padrão de todas as listas', () => {
+  it('é sempre o nome, de A a Z (pedido: todas as listas em ordem alfabética)', () => {
+    for (const d of [ENTRY_SORT_DEFAULT, BILL_SORT_DEFAULT, PERSON_SORT_DEFAULT, PURCHASE_SORT_DEFAULT, DEBTOR_SORT_DEFAULT, SLICE_SORT_DEFAULT, NAME_SORT_DEFAULT, TEMPLATE_SORT_DEFAULT, CONTACT_SORT_DEFAULT]) {
+      expect(d).toEqual({ key: 'nome', dir: 'asc' })
+    }
   })
 })
