@@ -37,6 +37,7 @@ const store = vi.hoisted(() => ({
   createPerson: vi.fn(() => ({ id: 'novo', done: Promise.resolve() })),
   updatePerson: vi.fn(() => Promise.resolve()),
   deletePerson: vi.fn(() => Promise.resolve()),
+  createPeople: vi.fn(() => Promise.resolve()),
 }))
 vi.mock('../auth', () => ({ useAuth: () => ({ user: { uid: 'u1', email: 'a@b.c' }, signOut: vi.fn() }) }))
 vi.mock('../data/hooks', () => hooks)
@@ -76,7 +77,7 @@ describe('Configurações > Contatos', () => {
 
   it('lista todos os contatos, com ou sem compra, em ordem alfabética', () => {
     renderAt('/cadastros/contatos')
-    const rows = screen.getAllByRole('listitem')
+    const rows = Array.from(document.querySelectorAll('main > ul.list > li'))
     expect(rows.map((r) => r.querySelector('.row-title')!.textContent)).toEqual(['Ana Souza', 'Frank'])
     expect(rows[0].textContent).toContain('2 compras')
     expect(rows[1].textContent).toContain('Sem compras')
@@ -177,5 +178,58 @@ describe('Importar contato no Novo contato', () => {
     const status = screen.getByRole('status').textContent!
     expect(status).toContain('Recebido: nome, telefone, e-mail.')
     expect(status).toContain('O telefone veio sem DDD')
+  })
+})
+
+describe('Importar vários contatos de uma vez', () => {
+  const card = (fn: string, tel = '', email = '') =>
+    `BEGIN:VCARD\nVERSION:3.0\nFN:${fn}\n${tel ? `TEL;type=CELL:${tel}\n` : ''}${email ? `EMAIL:${email}\n` : ''}END:VCARD`
+  const upload = (text: string) =>
+    fireEvent.change(screen.getByLabelText('Arquivo de contatos (.vcf)'), { target: { files: [new File([text], 'c.vcf', { type: 'text/vcard' })] } })
+  const rows = () => Array.from(document.querySelectorAll('.import-contacts > li'))
+
+  it('lista todos do arquivo, deixa desmarcado quem já existe e cria os marcados de uma vez', async () => {
+    renderAt('/cadastros/contatos')
+    expect(screen.getByText(/toque e segure um contato, marque os outros/)).toBeTruthy()
+    // Ana já existe (mesmo telefone, outro jeito de escrever); Mãe e Pai são novos; Pai repetido no arquivo
+    upload([card('Mãe', '(21) 98865-9770'), card('Ana S.', '+55 11 91234-5678'), card('Pai', '', 'pai@x.com'), card('pai')].join('\n'))
+    await waitFor(() => expect(rows()).toHaveLength(4))
+    const boxes = rows().map((r) => (r.querySelector('input') as HTMLInputElement).checked)
+    expect(boxes).toEqual([true, false, true, false])
+    expect(rows()[1].textContent).toContain('Já cadastrado')
+    expect(rows()[3].textContent).toContain('Já cadastrado')
+    fireEvent.click(screen.getByRole('button', { name: 'Importar 2 contatos' }))
+    await waitFor(() => expect(store.createPeople).toHaveBeenCalled())
+    expect(store.createPeople).toHaveBeenCalledWith('u1', [
+      { name: 'Mãe', phone: '21988659770', email: '', tone: 'amigavel', charges: [] },
+      { name: 'Pai', phone: '', email: 'pai@x.com', tone: 'amigavel', charges: [] },
+    ])
+    expect((await screen.findByRole('status')).textContent).toBe('2 contatos importados. 2 ficaram de fora.')
+  })
+
+  it('dá para marcar um repetido e importar mesmo assim, ou cancelar sem salvar', async () => {
+    renderAt('/cadastros/contatos')
+    upload(card('Frank'))
+    await waitFor(() => expect(rows()).toHaveLength(1))
+    expect((screen.getByRole('button', { name: 'Importar 0 contatos' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(rows()[0].querySelector('input')!)
+    expect(screen.getByRole('button', { name: 'Importar 1 contato' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Cancelar/ }))
+    expect(rows()).toHaveLength(0)
+    expect(store.createPeople).not.toHaveBeenCalled()
+  })
+
+  it('contato sem nome usa o telefone; telefone sem DDD é avisado', async () => {
+    renderAt('/cadastros/contatos')
+    upload('BEGIN:VCARD\nVERSION:3.0\nTEL:98865-9770\nEND:VCARD')
+    await waitFor(() => expect(rows()).toHaveLength(1))
+    expect(rows()[0].querySelector('.row-title')!.textContent).toBe('98865-9770')
+    expect(rows()[0].textContent).toContain('Telefone sem DDD')
+  })
+
+  it('arquivo sem contato avisa', async () => {
+    renderAt('/cadastros/contatos')
+    upload('nada aqui')
+    expect((await screen.findByRole('alert')).textContent).toContain('Não encontrei nenhum contato')
   })
 })

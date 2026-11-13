@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { ContactBatchImport } from '../components/ContactBatchImport'
 import { SortControl } from '../components/SortControl'
 import { usePeople, useReceivables } from '../data/hooks'
 import { useSortChoice } from '../data/sortPrefs'
@@ -45,6 +46,7 @@ export default function Contacts() {
           <Link className="btn primary" to="/cadastros/contatos/novo">
             Novo contato
           </Link>
+          <ContactBatchImport uid={uid} people={people.data} />
           {listed.length === 0 ? (
             <p className="muted center-text">Nenhum contato cadastrado.</p>
           ) : (

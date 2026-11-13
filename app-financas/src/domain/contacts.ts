@@ -100,3 +100,35 @@ export function parseVCards(text: string): ContactData[] {
   return contacts
 }
 
+
+/* ---------- Importação em lote (Ajustes > Contatos) ---------- */
+
+export interface ImportCandidate {
+  contact: ContactData
+  /** Já existe no app (mesmo nome ou mesmo telefone) ou repete um anterior no próprio arquivo. */
+  duplicate: boolean
+  /** Telefone sem DDD: entra assim, e a pessoa completa ao editar. */
+  noDDD: boolean
+}
+
+/** Últimos 8 dígitos: o mesmo celular com ou sem DDD, +55 ou o 9 da frente. */
+const phoneKey = (phone: string) => phone.replace(/\D/g, '').slice(-8)
+
+/**
+ * Prepara os contatos do arquivo para a lista de confirmação: dá nome a quem veio sem (o telefone ou o e-mail) e
+ * marca os repetidos, que começam desmarcados.
+ */
+export function importCandidates(contacts: ContactData[], existing: readonly { name: string; phone: string }[], simplify: (s: string) => string): ImportCandidate[] {
+  const names = new Set(existing.map((p) => simplify(p.name)).filter(Boolean))
+  const phones = new Set(existing.map((p) => phoneKey(p.phone)).filter((k) => k.length === 8))
+  return contacts.map((raw) => {
+    const contact = { ...raw, name: raw.name || raw.phone || raw.email }
+    const n = simplify(contact.name)
+    const k = phoneKey(contact.phone)
+    const duplicate = (n !== '' && names.has(n)) || (k.length === 8 && phones.has(k))
+    if (n) names.add(n)
+    if (k.length === 8) phones.add(k)
+    const digits = contact.phone.replace(/\D/g, '')
+    return { contact, duplicate, noDDD: contact.phone !== '' && digits.length < 10 }
+  })
+}

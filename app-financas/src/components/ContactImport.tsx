@@ -6,7 +6,42 @@ interface Props {
   onPick: (contact: ContactData) => void
 }
 
-function readText(file: File): Promise<string> {
+/** O passo a passo de levar contatos do celular para o app (um ou vários). */
+export function ContactHowTo({ many = false }: { many?: boolean }) {
+  return (
+    <details className="contact-howto" open>
+      <summary>Como importar da agenda do celular</summary>
+      <ol className="muted small-note">
+        {many ? (
+          <>
+            <li>
+              <strong>Android (Samsung e outros):</strong> no app Contatos, toque e segure um contato, marque os outros e toque em Compartilhar. Escolha
+              Arquivo vCard (.vcf) e salve o arquivo.
+            </li>
+            <li>
+              <strong>iPhone:</strong> no app Contatos, abra a lista (ou um contato), toque em Compartilhar e em Salvar em Arquivos.
+            </li>
+            <li>Volte aqui e toque em Importar contatos (.vcf). Confira a lista e toque em Importar.</li>
+          </>
+        ) : (
+          <>
+            <li>Abra o app Contatos do celular e toque na pessoa.</li>
+            <li>
+              <strong>Android (Samsung e outros):</strong> toque em Compartilhar (ou no menu ⋮ e em Compartilhar) e escolha Arquivo vCard (.vcf).
+              Salve o arquivo.
+            </li>
+            <li>
+              <strong>iPhone:</strong> toque em Compartilhar contato e em Salvar em Arquivos.
+            </li>
+            <li>Volte aqui, toque em Importar contato (.vcf) e escolha o arquivo. Nome, telefone e e-mail vêm preenchidos.</li>
+          </>
+        )}
+      </ol>
+    </details>
+  )
+}
+
+export function readText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result ?? ''))
@@ -42,7 +77,7 @@ export function ContactImport({ onPick }: Props) {
       } else {
         const c = contacts[0]
         onPick(c)
-        const extra = contacts.length > 1 ? ` O arquivo tem ${contacts.length} contatos; usei o primeiro.` : ''
+        const extra = contacts.length > 1 ? ` O arquivo tem ${contacts.length} contatos; usei o primeiro. Para criar todos, use Ajustes > Contatos > Importar contatos (.vcf).` : ''
         setMessage({ text: `Contato importado${c.name ? `: ${c.name}` : ''}.${receivedText(c)} Confira os dados antes de salvar.${extra}`, error: false })
       }
     } catch (e) {
@@ -67,20 +102,7 @@ export function ContactImport({ onPick }: Props) {
           onChange={(e) => void fromFile(e.target.files)}
         />
       </div>
-      <details className="contact-howto" open>
-        <summary>Como importar da agenda do celular</summary>
-        <ol className="muted small-note">
-          <li>Abra o app Contatos do celular e toque na pessoa.</li>
-          <li>
-            <strong>Android (Samsung e outros):</strong> toque em Compartilhar (ou no menu ⋮ e em Compartilhar) e escolha Arquivo vCard (.vcf).
-            Salve o arquivo.
-          </li>
-          <li>
-            <strong>iPhone:</strong> toque em Compartilhar contato e em Salvar em Arquivos.
-          </li>
-          <li>Volte aqui, toque em Importar contato (.vcf) e escolha o arquivo. Nome, telefone e e-mail vêm preenchidos.</li>
-        </ol>
-      </details>
+      <ContactHowTo />
       {message && (
         <p className={message.error ? 'error small-note' : 'muted small-note'} role={message.error ? 'alert' : 'status'}>
           {message.text}

@@ -2331,3 +2331,26 @@ ul.heat-items > li {
   gap: 8px;
   font-weight: 650;
 }
+
+/* Importar contatos em lote: a caixinha ao lado do nome, com a linha inteira tocável. */
+.import-contacts label.check {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  color: var(--text);
+  font-size: 1rem;
+}
+.import-contacts input[type='checkbox'] {
+  width: 22px;
+  min-height: 22px;
+  margin-top: 2px;
+  flex: none;
+}
+.import-contacts .row-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}

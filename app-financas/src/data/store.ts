@@ -291,6 +291,11 @@ export function createPerson(uid: string, person: Data<Person>): { id: string; d
   return { id: ref.id, done: setDoc(ref, person) }
 }
 
+/** Cadastra vários contatos de uma vez (importação de arquivo .vcf), em gravações de até 500. */
+export function createPeople(uid: string, people: Data<Person>[]): Promise<void> {
+  return commitInChunks(people.map((p) => (batch: WriteBatch) => batch.set(doc(peopleCol(uid)), p)))
+}
+
 export function updatePerson(uid: string, person: Person) {
   return setDoc(doc(peopleCol(uid), person.id), withoutId(person))
 }
