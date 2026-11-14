@@ -84,7 +84,7 @@ export const FEATURES: { icon: string; title: string; text: string; version: str
   {
     icon: 'M4 20 9 6l5 14M6 15h6M15 20l3-8 3 8M16 18h4',
     title: 'Letra do tamanho certo',
-    version: '1.13',
+    version: '1.22',
     text: 'Em Configurações, escolha a letra Pequena, Média ou Grande. Vale para o app todo e fica guardada neste aparelho.',
   },
   {

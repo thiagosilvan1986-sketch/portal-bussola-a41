@@ -131,7 +131,7 @@ describe('versão do app', () => {
     const known = new Set(VERSIONS.map((v) => v.version))
     for (const f of FEATURES) expect(known.has(f.version), f.title).toBe(true)
     expect(CURRENT_VERSION).toEqual(VERSIONS[VERSIONS.length - 1])
-    expect(CURRENT_VERSION.version).toBe('1.21')
+    expect(CURRENT_VERSION.version).toBe('1.22')
     // números em ordem e sem repetir
     const nums = VERSIONS.map((v) => Number(v.version.split('.')[1]))
     expect(nums).toEqual(nums.map((_, i) => i))
@@ -143,8 +143,37 @@ describe('versão do app', () => {
         <AppRoutes />
       </MemoryRouter>,
     )
-    expect(screen.getByText('Versão 1.21 · atualizado em 13/11/2026')).toBeTruthy()
+    expect(screen.getByText('Versão 1.22 · atualizado em 13/11/2026')).toBeTruthy()
     const item = screen.getByText('Cobrança sem climão').closest('li')!
     expect(item.textContent).toContain('Atualizado na versão 1.2 · 10/11/2026')
+  })
+})
+
+describe('cartões das listas em qualquer tamanho de letra', () => {
+  const css = readFileSync('src/styles.css', 'utf8')
+  const rule = (selector: string) => {
+    const at = css.indexOf(`\n${selector} {`)
+    expect(at, selector).toBeGreaterThanOrEqual(0)
+    return css.slice(at, css.indexOf('}', at))
+  }
+
+  it('nunca corta palavras no meio (só quebra uma palavra maior que a linha inteira)', () => {
+    expect(css).not.toMatch(/overflow-wrap:\s*anywhere/)
+    expect(css).not.toMatch(/word-break:\s*break-all/)
+  })
+
+  it('o cartão deixa os botões descerem quando título e botões não cabem lado a lado', () => {
+    expect(rule('.row-card')).toMatch(/flex-wrap:\s*wrap/)
+    expect(rule('.row-main')).toMatch(/flex:\s*1 1 \d+(\.\d+)?rem/)
+    expect(rule('.parcel-actions')).toMatch(/flex-wrap:\s*wrap/)
+  })
+
+  it('parcelas: valor e botões numa linha só embaixo do título; cartões em coluna sem espaço sobrando', () => {
+    expect(rule('.row-card.parcel > .row-side')).toMatch(/flex:\s*1 1 100%/)
+    expect(rule('.edit-row > .row-main')).toMatch(/flex:\s*none/)
+  })
+
+  it('os botões do título da tela não quebram em duas linhas', () => {
+    expect(css).toMatch(/\.page-head > \.btn,\s*\.page-head > a\.btn \{\s*white-space: nowrap;/)
   })
 })
