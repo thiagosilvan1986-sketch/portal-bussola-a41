@@ -6,6 +6,7 @@ import { createReceivable, updateReceivable } from '../data/store'
 import { centsToInput, formatBRL, parseBRLToCents } from '../domain/money'
 import { ContactImport } from '../components/ContactImport'
 import { CopyButton } from '../components/CopyButton'
+import { DaySelect } from '../components/DaySelect'
 import { MoneyInput } from '../components/MoneyInput'
 import { copyName } from '../domain/registry'
 import { alphabetical } from '../domain/text'
@@ -20,6 +21,7 @@ import {
   editReceivable,
   formatPhone,
   isCardBill,
+  isMonthly,
   isValidEmail,
   isValidPhone,
   lastPaidNumber,
@@ -29,7 +31,7 @@ import {
   receivableFormTitle,
   withFirstReceived,
 } from '../domain/receivables'
-import type { Competence, MessageTone, Person, Receivable, ReceivableKind } from '../domain/types'
+import type { Competence, MessageTone, Person, Receivable, ReceivableKind, ValueType } from '../domain/types'
 
 const NEW_PERSON = '__new'
 
@@ -57,6 +59,8 @@ interface Draft {
   rateioCount: string
   startMonth: string
   endMonth: string
+  valueType?: ValueType
+  dueDay?: string
 }
 
 /** Caminho da tela sem o "conta=" da volta, para o rascunho valer só para a mesma tela. */
@@ -182,12 +186,17 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
   // A cópia começa hoje: o vencimento antigo geraria parcelas atrasadas que a pessoa não pediu.
   const [firstDue, setFirstDue] = useState(draft?.firstDue ?? (edit ? edit.firstDueDate : today))
   const [received, setReceived] = useState(draft?.received ?? '0')
-  // Rateio: valor da parte da pessoa por mês, parcelas (vazio = todo mês, sem fim), mês de início e, para encerrar, o último mês.
-  const sourceRateio = source?.kind === 'rateio' ? source : undefined
-  const [monthly, setMonthly] = useState(draft?.monthly ?? (sourceRateio ? centsToInput(sourceRateio.monthlyCents ?? sourceRateio.installments[0]?.amountCents ?? 0) : ''))
-  const [rateioCount, setRateioCount] = useState(draft?.rateioCount ?? (sourceRateio && !sourceRateio.recurring ? String(sourceRateio.installmentCount) : ''))
-  const [startMonth, setStartMonth] = useState<Competence>(draft?.startMonth ?? (edit?.kind === 'rateio' ? competenceOf(edit.firstDueDate) : competenceOf(today)))
-  const [endMonth, setEndMonth] = useState<string>(draft?.endMonth ?? (edit?.kind === 'rateio' ? (edit.endMonth ?? '') : ''))
+  // Cobrança mensal (rateio e serviço prestado): valor por mês, parcelas (vazio = todo mês, sem fim), mês de início
+  // e, para encerrar, o último mês. O serviço também tem valor fixo ou variável e o dia do vencimento.
+  const sourceMonthly = source && (source.kind === 'rateio' || source.kind === 'servico') ? source : undefined
+  const [monthly, setMonthly] = useState(draft?.monthly ?? (sourceMonthly ? centsToInput(sourceMonthly.monthlyCents ?? sourceMonthly.installments[0]?.amountCents ?? 0) : ''))
+  const [rateioCount, setRateioCount] = useState(
+    draft?.rateioCount ?? (sourceMonthly && isMonthly(sourceMonthly) && !sourceMonthly.recurring ? String(sourceMonthly.installmentCount) : ''),
+  )
+  const [startMonth, setStartMonth] = useState<Competence>(draft?.startMonth ?? (edit && isMonthly(edit) ? competenceOf(edit.firstDueDate) : competenceOf(today)))
+  const [endMonth, setEndMonth] = useState<string>(draft?.endMonth ?? (edit && isMonthly(edit) ? (edit.endMonth ?? '') : ''))
+  const [valueType, setValueType] = useState<ValueType>(draft?.valueType ?? source?.valueType ?? 'fixed')
+  const [dueDay, setDueDay] = useState(draft?.dueDay ?? (sourceMonthly ? String(Number(sourceMonthly.firstDueDate.slice(8, 10))) : String(Number(today.slice(8, 10)))))
   const [notes, setNotes] = useState(draft?.notes ?? source?.notes ?? '')
   // Reembolso do cartão pode se referir a uma conta paga com cartão de crédito; o rateio é sempre de uma conta a pagar.
   // O app mostra o gasto real: o que foi pago menos o que a pessoa devolve.
@@ -205,7 +214,7 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
   function newBill() {
     keepDraft({
       path: here, savedAt: Date.now(), kind, personChoice, name, phone, email, tone, description, total, count, firstDue,
-      received, notes, billId, monthly, rateioCount, startMonth, endMonth,
+      received, notes, billId, monthly, rateioCount, startMonth, endMonth, valueType, dueDay,
     })
     navigate(`/contas/nova?voltar=${encodeURIComponent(here)}`)
   }
@@ -234,6 +243,8 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
   const rn = Number(rateioCount)
   const rateioCountValid = rateioCount === '' || (Number.isInteger(rn) && rn >= 1 && rn <= MAX_INSTALLMENTS)
   const openEnded = rateioCount === ''
+  // Serviços cadastrados antes da v1.21 continuam no modelo de valor total parcelado.
+  const monthlyMode = kind === 'rateio' || (kind === 'servico' && (!edit || isMonthly(edit)))
 
   function validPerson(): string | null {
     if (edit) return null
@@ -252,17 +263,29 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
       : { ...sortedPeople.find((p) => p.id === personChoice)!, id: personChoice }
   }
 
-  function submitRateio() {
+  /** Rateio e serviço prestado mensal: valor por mês, com ou sem fim. */
+  function submitMonthly() {
+    const isService = kind === 'servico'
     const personError = validPerson()
     if (personError) return setError(personError)
-    if (!linkedBill) return setError('Escolha a conta a pagar deste rateio.')
-    if (monthlyCents === null || monthlyCents <= 0) return setError('Informe o valor da parte da pessoa por mês. Exemplo: 477,00')
+    if (!isService && !linkedBill) return setError('Escolha a conta a pagar deste rateio.')
+    if (isService && !description.trim()) return setError('Informe qual foi o serviço.')
+    if (monthlyCents === null || monthlyCents <= 0) {
+      return setError(
+        isService
+          ? `Informe o valor ${valueType === 'variable' ? 'previsto ' : ''}por mês. Exemplo: 350,00`
+          : 'Informe o valor da parte da pessoa por mês. Exemplo: 477,00',
+      )
+    }
     if (!rateioCountValid) return setError(`O número de parcelas deve ser de 1 a ${MAX_INSTALLMENTS}, ou fique vazio para todo mês.`)
+    if (isService && !dueDay) return setError('Escolha o dia do vencimento.')
     if (!/^\d{4}-\d{2}$/.test(startMonth)) return setError('Informe o mês de início.')
     const end = openEnded && endMonth ? endMonth : null
     if (end && end < startMonth) return setError('O último mês não pode ser antes do mês de início.')
-    const desc = description.trim() || linkedBill.name
-    const firstDueDate = dueDateFor(startMonth, linkedBill.dueDay)
+    const day = isService ? Number(dueDay) : linkedBill!.dueDay
+    const desc = isService ? description.trim() : description.trim() || linkedBill!.name
+    const firstDueDate = dueDateFor(startMonth, day)
+    const extra = isService ? { billId: null, valueType } : { billId: linkedBill!.id }
 
     if (edit) {
       const paidUpTo = lastPaidNumber(edit.installments)
@@ -281,7 +304,7 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
           installmentCount: openEnded ? edit.installmentCount : rn,
           firstDueDate,
           notes: notes.trim(),
-          billId: linkedBill.id,
+          ...extra,
           monthlyCents,
           recurring: openEnded,
           endMonth: end,
@@ -292,8 +315,8 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
     }
 
     const fresh = openEnded
-      ? buildRateio(monthlyCents, startMonth, linkedBill.dueDay, { until: addMonths(competenceOf(today), 1), endMonth: end })
-      : buildRateio(monthlyCents, startMonth, linkedBill.dueDay, { count: rn })
+      ? buildRateio(monthlyCents, startMonth, day, { until: addMonths(competenceOf(today), 1), endMonth: end })
+      : buildRateio(monthlyCents, startMonth, day, { count: rn })
     const done = Number(received || '0')
     const limit = openEnded ? fresh.length : rn - 1
     if (!Number.isInteger(done) || done < 0 || done > limit) {
@@ -311,7 +334,7 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
         firstDueDate,
         installments,
         notes: notes.trim(),
-        billId: linkedBill.id,
+        ...(isService ? { valueType } : { billId: linkedBill!.id }),
         monthlyCents,
         recurring: openEnded,
         endMonth: end,
@@ -322,7 +345,7 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
 
   function onSubmit(ev: FormEvent) {
     ev.preventDefault()
-    if (kind === 'rateio') return submitRateio()
+    if (monthlyMode) return submitMonthly()
     if (!edit) {
       if (!isNew && !personChoice) return setError('Escolha a pessoa ou cadastre uma nova.')
       if (isNew) {
@@ -388,7 +411,7 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
   const cancelTo = edit ? `/receber/pessoa/${edit.personId}` : listPath(kind)
   const title = receivableFormTitle(kind, {
     editing: Boolean(edit),
-    installments: kind === 'rateio' ? (openEnded || !rateioCountValid ? null : rn) : validCount ? n : null,
+    installments: monthlyMode ? (openEnded || !rateioCountValid ? null : rn) : validCount ? n : null,
   })
   const forPerson = edit ? editPerson?.name : isNew ? name.trim() : sortedPeople.find((p) => p.id === personChoice)?.name
 
@@ -547,12 +570,21 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
           </>
         )}
 
-        {kind === 'rateio' ? (
+        {monthlyMode ? (
           <>
+            {kind === 'servico' && (
+              <label>
+                Tipo de valor
+                <select value={valueType} onChange={(e) => setValueType(e.target.value as ValueType)}>
+                  <option value="fixed">Fixo (sempre o mesmo)</option>
+                  <option value="variable">Variável (você informa o valor de cada mês)</option>
+                </select>
+              </label>
+            )}
             <div className="row">
               <label>
-                Parte da pessoa por mês (R$)
-                <MoneyInput value={monthly} onChange={setMonthly} placeholder="477,00" />
+                {kind === 'servico' ? (valueType === 'variable' ? 'Valor previsto por mês (R$)' : 'Valor por mês (R$)') : 'Parte da pessoa por mês (R$)'}
+                <MoneyInput value={monthly} onChange={setMonthly} placeholder={kind === 'servico' ? '350,00' : '477,00'} />
               </label>
               <label>
                 Nº de parcelas (opcional)
@@ -566,22 +598,38 @@ function Form({ uid, people, peopleReady, edit, editPerson, copyOf, copyPerson }
             </div>
             <p className="muted small-note">
               {openEnded
-                ? 'Sem número de parcelas, a parte se repete todo mês até você informar o último mês.'
+                ? `Sem número de parcelas, ${kind === 'servico' ? 'o serviço' : 'a parte'} se repete todo mês até você informar o último mês.`
                 : rateioCountValid && monthlyCents
                   ? `${rn} × ${formatBRL(monthlyCents)}, uma por mês.`
-                  : 'Informe as parcelas para um rateio com fim.'}
+                  : `Informe as parcelas para ${kind === 'servico' ? 'um serviço' : 'um rateio'} com fim.`}
+              {kind === 'servico' && valueType === 'variable' && ' No variável, cada mês tem “Informar valor” para lançar o valor real antes de cobrar.'}
             </p>
-            <label>
-              Começa em
-              <input type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value)} />
-            </label>
+            {kind === 'servico' ? (
+              <div className="row">
+                <label>
+                  Dia do vencimento
+                  <DaySelect value={dueDay} onChange={setDueDay} emptyLabel="Escolha o dia" required />
+                </label>
+                <label>
+                  Começa em
+                  <input type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value)} />
+                </label>
+              </div>
+            ) : (
+              <label>
+                Começa em
+                <input type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value)} />
+              </label>
+            )}
             {edit && openEnded && (
               <>
                 <label>
                   Último mês (para encerrar)
                   <input type="month" value={endMonth} min={startMonth} onChange={(e) => setEndMonth(e.target.value)} />
                 </label>
-                <p className="muted small-note">Deixe vazio enquanto o rateio continuar. Ao informar, os meses seguintes deixam de ser cobrados.</p>
+                <p className="muted small-note">
+                  Deixe vazio enquanto {kind === 'servico' ? 'o serviço' : 'o rateio'} continuar. Ao informar, os meses seguintes deixam de ser cobrados.
+                </p>
               </>
             )}
             {edit ? (

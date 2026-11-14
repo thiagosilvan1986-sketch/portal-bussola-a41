@@ -47,6 +47,7 @@ const store = vi.hoisted(() => ({
   deleteReceivable: vi.fn(),
   deletePerson: vi.fn(),
   deleteChargeLog: vi.fn(),
+  setInstallmentAmount: vi.fn(() => Promise.resolve()),
 }))
 
 vi.mock('../auth', () => ({ useAuth: () => ({ user: { uid: 'u1', email: 'a@b.c' }, signOut: vi.fn() }) }))
@@ -173,20 +174,30 @@ describe('nova compra parcelada', () => {
     fireEvent.change(screen.getByLabelText('Tom da cobrança'), { target: { value: 'profissional' } })
     fireEvent.click(screen.getByRole('radio', { name: /Serviço prestado/ }))
     fireEvent.change(screen.getByLabelText('Qual foi o serviço'), { target: { value: 'Consultoria' } })
-    fireEvent.change(screen.getByLabelText(/Valor total/), { target: { value: '500,00' } })
+    fireEvent.change(screen.getByLabelText('Valor por mês (R$)'), { target: { value: '500,00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
     expect(store.createReceivable.mock.calls[0][1].person).toMatchObject({ name: 'Dr. Paulo', tone: 'profissional' })
   })
 
-  it('cadastra um serviço prestado quando o tipo é escolhido', () => {
+  it('cadastra um serviço prestado mensal com número de parcelas, valor fixo, dia e mês de início', () => {
     renderAt('/receber/nova?pessoa=p1')
     expect((screen.getByRole('radio', { name: /Reembolso do cartão/ }) as HTMLInputElement).checked).toBe(true)
     fireEvent.click(screen.getByRole('radio', { name: /Serviço prestado/ }))
     fireEvent.change(screen.getByLabelText('Qual foi o serviço'), { target: { value: 'Pintura' } })
-    fireEvent.change(screen.getByLabelText(/Valor total/), { target: { value: '900,00' } })
+    expect((screen.getByLabelText('Tipo de valor') as HTMLSelectElement).value).toBe('fixed')
+    fireEvent.change(screen.getByLabelText('Valor por mês (R$)'), { target: { value: '300,00' } })
     fireEvent.change(screen.getByLabelText(/Nº de parcelas/), { target: { value: '3' } })
+    fireEvent.change(screen.getByLabelText('Dia do vencimento'), { target: { value: '10' } })
+    fireEvent.change(screen.getByLabelText('Começa em'), { target: { value: '2026-11' } })
     fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
-    expect(store.createReceivable.mock.calls[0][1].receivable).toMatchObject({ kind: 'servico', description: 'Pintura', totalCents: 90000 })
+    const saved = store.createReceivable.mock.calls[0][1].receivable
+    expect(saved).toMatchObject({ kind: 'servico', description: 'Pintura', totalCents: 90000, monthlyCents: 30000, recurring: false, valueType: 'fixed', firstDueDate: '2026-11-10' })
+    expect(saved.billId).toBeUndefined()
+    expect(saved.installments.map((i: { dueDate: string; amountCents: number }) => [i.dueDate, i.amountCents])).toEqual([
+      ['2026-11-10', 30000],
+      ['2026-12-10', 30000],
+      ['2027-01-10', 30000],
+    ])
   })
 
   it('abre já como serviço quando vem da lista de serviços', () => {
@@ -858,5 +869,96 @@ describe('período do resumo (Mês | Ano | Tudo)', () => {
     cleanup()
     renderAt('/receber/pessoa/p1')
     expect(flat(screen.getByRole('region', { name: 'Parte da Ana' }).textContent)).toContain('falta R$ 1.000,00 este mês')
+  })
+})
+
+describe('Serviço prestado mensal (v1.21)', () => {
+  const servicoMensal = (over: Partial<Receivable> = {}): Receivable => ({
+    id: 'r9',
+    personId: 'p1',
+    kind: 'servico',
+    description: 'Aulas de inglês',
+    totalCents: 70000,
+    installmentCount: 2,
+    firstDueDate: '2026-10-15',
+    installments: [
+      { number: 1, dueDate: '2026-10-15', amountCents: 35000, paidAt: '2026-10-15', paidAmountCents: 35000 },
+      { number: 2, dueDate: '2026-11-15', amountCents: 35000, paidAt: null, paidAmountCents: null },
+    ],
+    notes: '',
+    monthlyCents: 35000,
+    recurring: true,
+    endMonth: null,
+    valueType: 'variable',
+    ...over,
+  })
+
+  it('sem número de parcelas e variável: repete todo mês, com o previsto e o tipo de valor gravados', () => {
+    renderAt('/receber/nova?pessoa=p1&tipo=servico')
+    fireEvent.change(screen.getByLabelText('Qual foi o serviço'), { target: { value: 'Aulas de inglês' } })
+    fireEvent.change(screen.getByLabelText('Tipo de valor'), { target: { value: 'variable' } })
+    expect(screen.getByText(/cada mês tem “Informar valor”/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Valor previsto por mês (R$)'), { target: { value: '350,00' } })
+    fireEvent.change(screen.getByLabelText('Dia do vencimento'), { target: { value: '15' } })
+    fireEvent.change(screen.getByLabelText('Começa em'), { target: { value: '2026-11' } })
+    expect(screen.getByText(/o serviço se repete todo mês/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    const saved = store.createReceivable.mock.calls[0][1].receivable
+    expect(saved).toMatchObject({ kind: 'servico', recurring: true, valueType: 'variable', monthlyCents: 35000, endMonth: null })
+    // grava até o mês que vem; os seguintes o app completa ao ler
+    expect(saved.installments.map((i: { dueDate: string }) => i.dueDate)).toEqual(['2026-11-15', '2026-12-15'])
+  })
+
+  it('pede o dia do vencimento e o valor', () => {
+    renderAt('/receber/nova?pessoa=p1&tipo=servico')
+    fireEvent.change(screen.getByLabelText('Qual foi o serviço'), { target: { value: 'Faxina' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(screen.getByRole('alert').textContent).toBe('Informe o valor por mês. Exemplo: 350,00')
+    expect(store.createReceivable).not.toHaveBeenCalled()
+  })
+
+  it('na tela da pessoa, o mês variável mostra o previsto e o botão Informar valor', () => {
+    setData([ana], [servicoMensal()])
+    renderAt('/receber/pessoa/p1')
+    const section = screen.getByRole('region', { name: 'Aulas de inglês' })
+    expect(flat(section.textContent)).toContain('/mês (previsto)')
+    expect(section.textContent).toContain('Mensalidade de nov/2026')
+    expect(section.textContent).toContain('Valor previsto: informe o do mês')
+    fireEvent.click(within(section).getByRole('button', { name: /Informar valor da mensalidade de nov\/2026/ }))
+    fireEvent.change(within(section).getByLabelText('Valor deste mês'), { target: { value: '412,50' } })
+    fireEvent.click(within(section).getByRole('button', { name: 'Salvar valor' }))
+    expect(store.setInstallmentAmount).toHaveBeenCalledWith('u1', expect.objectContaining({ id: 'r9' }), 2, 41250)
+  })
+
+  it('o serviço fixo não tem Informar valor; o antigo continua no valor total parcelado', () => {
+    setData([ana], [servicoMensal({ valueType: 'fixed' }), instalacao()])
+    renderAt('/receber/pessoa/p1')
+    expect(screen.queryByRole('button', { name: /Informar valor/ })).toBeNull()
+    cleanup()
+    setData([ana], [instalacao()])
+    renderAt('/receber/compra/r2/editar')
+    expect(screen.getByLabelText(/Valor total/)).toBeTruthy()
+    expect(screen.queryByLabelText('Tipo de valor')).toBeNull()
+  })
+
+  it('editar o serviço mensal abre nos campos mensais e mantém o que foi registrado', () => {
+    const mensal = servicoMensal({
+      installments: [
+        { number: 1, dueDate: '2026-10-15', amountCents: 35000, paidAt: '2026-10-15', paidAmountCents: 35000 },
+        { number: 2, dueDate: '2026-11-15', amountCents: 41250, paidAt: null, paidAmountCents: null, amountSet: true },
+      ],
+    })
+    setData([ana], [mensal])
+    renderAt('/receber/compra/r9/editar')
+    expect((screen.getByLabelText('Tipo de valor') as HTMLSelectElement).value).toBe('variable')
+    expect((screen.getByLabelText('Valor previsto por mês (R$)') as HTMLInputElement).value).toBe('350,00')
+    expect((screen.getByLabelText('Dia do vencimento') as HTMLSelectElement).value).toBe('15')
+    expect(screen.getByLabelText('Último mês (para encerrar)')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Valor previsto por mês (R$)'), { target: { value: '380,00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }))
+    const saved = store.updateReceivable.mock.calls[0][1]
+    expect(saved).toMatchObject({ kind: 'servico', monthlyCents: 38000, recurring: true, valueType: 'variable', billId: null })
+    expect(saved.installments[0]).toMatchObject({ paidAt: '2026-10-15', amountCents: 35000 })
+    expect(saved.installments[1]).toMatchObject({ amountCents: 41250, amountSet: true })
   })
 })

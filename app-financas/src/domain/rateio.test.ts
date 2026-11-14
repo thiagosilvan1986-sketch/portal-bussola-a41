@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { netOfReimbursements } from './linked'
 import { buildEntry } from './bills'
-import { buildRateio, chargeMessage, editReceivable, extendRecurring, isCardBill, isOpenEnded, parcelLabel } from './receivables'
+import { amountPending, buildRateio, chargeMessage, editReceivable, extendRecurring, isCardBill, isMonthly, isOpenEnded, parcelLabel } from './receivables'
 import type { Bill, Person, Receivable } from './types'
 
 const carol: Person = { id: 'p1', name: 'Carol Lima', phone: '', email: '', charges: [] }
@@ -57,7 +57,8 @@ describe('rateio de conta', () => {
       kind: 'rateio', description: 'Parte da Carol', totalCents: r.totalCents, installmentCount: r.installmentCount,
       firstDueDate: '2026-09-10', notes: '', billId: 'b1', monthlyCents: 100000, recurring: true, endMonth: null,
     })
-    expect(edited.installments.map((i) => i.amountCents)).toEqual([100000, 100000, 100000, 100000])
+    // o mês já recebido fica com o valor da época (não passa a cobrar a diferença); os outros mudam
+    expect(edited.installments.map((i) => i.amountCents)).toEqual([95400, 100000, 100000, 100000])
     expect(edited.installments[0]).toMatchObject({ paidAt: '2026-09-10', paidAmountCents: 95400 })
     expect(edited.monthlyCents).toBe(100000)
   })
@@ -101,5 +102,38 @@ describe('contas que podem ser ligadas ao reembolso do cartão', () => {
     expect(isCardBill({ paymentMethod: 'nubank' }, payments)).toBe(true)
     expect(isCardBill({ paymentMethod: 'boleto' }, payments)).toBe(false)
     expect(isCardBill({ paymentMethod: 'deb' }, payments)).toBe(false)
+  })
+})
+
+describe('serviço prestado mensal', () => {
+  const servico = (): Receivable => ({
+    id: 's1', personId: 'p1', kind: 'servico', description: 'Aulas', totalCents: 35000, installmentCount: 1,
+    firstDueDate: '2026-10-15', notes: '', monthlyCents: 35000, recurring: true, endMonth: null, valueType: 'variable',
+    installments: [{ number: 1, dueDate: '2026-10-15', amountCents: 35000, paidAt: null, paidAmountCents: null }],
+  })
+
+  it('sem fim, o app completa os meses ao ler, como no rateio', () => {
+    const r = extendRecurring(servico(), '2027-01')
+    expect(r.installments.map((i) => i.dueDate)).toEqual(['2026-10-15', '2026-11-15', '2026-12-15', '2027-01-15'])
+    expect(isOpenEnded(r)).toBe(true)
+    expect(isMonthly(r)).toBe(true)
+  })
+
+  it('chama cada mês de mensalidade', () => {
+    const r = servico()
+    expect(parcelLabel(r, r.installments[0])).toBe('Mensalidade de out/2026')
+  })
+
+  it('no variável, o mês com valor informado não fica pendente; o fixo nunca fica', () => {
+    const r = servico()
+    expect(amountPending(r, r.installments[0])).toBe(true)
+    expect(amountPending(r, { ...r.installments[0], amountSet: true, amountCents: 41000 })).toBe(false)
+    expect(amountPending({ ...r, valueType: 'fixed' }, r.installments[0])).toBe(false)
+  })
+
+  it('serviço antigo (valor total parcelado) não é mensal', () => {
+    const { monthlyCents: _m, recurring: _r, ...antigo } = servico()
+    expect(isMonthly(antigo)).toBe(false)
+    expect(isOpenEnded(antigo)).toBe(false)
   })
 })

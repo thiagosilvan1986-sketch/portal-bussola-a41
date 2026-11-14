@@ -320,6 +320,16 @@ export function setInstallmentPayment(
   return updateDoc(doc(receivablesCol(uid), receivable.id), { installments })
 }
 
+/** Serviço de valor variável: grava o valor de um mês (antes de cobrar). Reescreve a lista de parcelas. */
+export function setInstallmentAmount(uid: string, receivable: Receivable, number: number, amountCents: number) {
+  const installments: Installment[] = receivable.installments.map((i) => (i.number === number ? { ...i, amountCents, amountSet: true } : i))
+  return updateDoc(doc(receivablesCol(uid), receivable.id), {
+    installments,
+    installmentCount: installments.length,
+    totalCents: installments.reduce((acc, i) => acc + i.amountCents, 0),
+  })
+}
+
 /** Grava a compra editada (veja `editReceivable`, que mantém as baixas já feitas). */
 export function updateReceivable(uid: string, receivable: Receivable) {
   return setDoc(doc(receivablesCol(uid), receivable.id), { ...withoutId(receivable), billId: receivable.billId ?? null })

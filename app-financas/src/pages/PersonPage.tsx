@@ -11,7 +11,7 @@ import { useDeviceChoice } from '../data/devicePrefs'
 import { StatusChip } from '../components/StatusChip'
 import { useBills, usePeople, useReceivables, useToday } from '../data/hooks'
 import { useSortChoice } from '../data/sortPrefs'
-import { deleteChargeLog, deletePerson, deleteReceivable, logCharge, setInstallmentPayment, updatePerson } from '../data/store'
+import { deleteChargeLog, deletePerson, deleteReceivable, logCharge, setInstallmentAmount, setInstallmentPayment, updatePerson } from '../data/store'
 import { formatCompetence, formatDateBR } from '../domain/dates'
 import { PURCHASE_SORTS, PURCHASE_SORT_DEFAULT, sortPurchasesBy, type PurchaseSortKey } from '../domain/listSorts'
 import type { SortChoice } from '../domain/sorting'
@@ -30,6 +30,7 @@ import {
   type Horizon,
   horizonPhrase,
   isOpenEnded,
+  amountPending,
   scopeReceivable,
   scopeReceivables,
   isSettled,
@@ -460,7 +461,7 @@ function Purchase({
           {openEnded ? (
             <>
               {money(receivable.monthlyCents ?? 0)}
-              <span className="muted small"> /mês</span>
+              <span className="muted small"> /mês{receivable.valueType === 'variable' ? ' (previsto)' : ''}</span>
             </>
           ) : (
             money(receivable.totalCents)
@@ -509,6 +510,20 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
   const status = installmentStatus(i, today)
   const settled = isSettled(i)
   const label = parcelLabel(receivable, i)
+  // Serviço de valor variável: o valor do mês é lançado antes de cobrar.
+  const pending = amountPending(receivable, i)
+  const [setting, setSetting] = useState(false)
+  const [monthValue, setMonthValue] = useState(i.amountSet ? centsToInput(i.amountCents) : '')
+  const [valueError, setValueError] = useState<string | null>(null)
+
+  function saveMonthValue(ev: FormEvent) {
+    ev.preventDefault()
+    const cents = parseBRLToCents(monthValue)
+    if (cents === null || cents <= 0) return setValueError('Informe o valor deste mês. Exemplo: 350,00')
+    setInstallmentAmount(uid, receivable, i.number, cents).catch(log)
+    setValueError(null)
+    setSetting(false)
+  }
 
   function quick() {
     setInstallmentPayment(uid, receivable, i.number, { paidAt: today, paidAmountCents: i.amountCents }).catch(log)
@@ -530,7 +545,8 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
         <span className="row-title">
           {isOpenEnded(receivable) ? (
             <>
-              Parte de <span className="nowrap">{label.replace('Parte de ', '')}</span>
+              {label.slice(0, label.indexOf(' de ') + 4)}
+              <span className="nowrap">{label.slice(label.indexOf(' de ') + 4)}</span>
             </>
           ) : (
             label
@@ -541,6 +557,11 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
           {i.paidAt ? ` · recebida em ${formatDateBR(i.paidAt)}` : ''}
         </span>
         <StatusChip status={status} />
+        {pending && (
+          <span className="chip chip-prevista">
+            <span aria-hidden="true">≈ </span>Valor previsto: informe o do mês
+          </span>
+        )}
       </div>
       <div className="row-side">
         <strong>{money(settled ? (i.paidAmountCents ?? 0) : installmentRemaining(i))}</strong>
@@ -555,6 +576,11 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
               Desfazer
             </button>
           )}
+          {receivable.valueType === 'variable' && i.paidAt === null && (
+            <button className="link-btn" onClick={() => setSetting((v) => !v)} aria-label={`Informar valor da ${label.toLowerCase()} (${receivable.description})`}>
+              {i.amountSet ? 'Mudar valor' : 'Informar valor'}
+            </button>
+          )}
           {!settled && (
             <>
               <button className="link-btn" onClick={() => setEditing((v) => !v)}>
@@ -567,6 +593,27 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
           )}
         </div>
       </div>
+      {setting && (
+        <form className="parcel-form" onSubmit={saveMonthValue} aria-label={`Valor da ${label.toLowerCase()}`} noValidate>
+          <label>
+            Valor deste mês
+            <MoneyInput value={monthValue} onChange={setMonthValue} placeholder={centsToInput(i.amountCents)} />
+          </label>
+          {valueError && (
+            <p className="error" role="alert">
+              {valueError}
+            </p>
+          )}
+          <div className="actions">
+            <button className="btn primary small" type="submit">
+              Salvar valor
+            </button>
+            <button className="btn small" type="button" onClick={() => setSetting(false)}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
       {editing && (
         <form className="parcel-form" onSubmit={confirm} aria-label={`Dar baixa na ${label.toLowerCase()}`} noValidate>
           <div className="row">

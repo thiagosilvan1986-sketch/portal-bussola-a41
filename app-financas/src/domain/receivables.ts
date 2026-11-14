@@ -14,6 +14,7 @@ import type {
   Person,
   Receivable,
   ReceivableKind,
+  ValueType,
 } from './types'
 
 export const MAX_INSTALLMENTS = 60
@@ -30,7 +31,7 @@ export const KIND_INFO: Record<ReceivableKind, { tab: string; title: string; hin
   servico: {
     tab: 'Serviços',
     title: 'Serviço prestado',
-    hint: 'Serviço que você prestou e tem a receber de verdade.',
+    hint: 'Serviço que você presta e recebe por mês, com valor fixo ou variável, sem fim ou com número de parcelas.',
     placeholder: 'Ex.: Instalação de ar-condicionado',
   },
   rateio: {
@@ -80,10 +81,24 @@ export function isCardBill(bill: Pick<Bill, 'paymentMethod'>, payments: readonly
 
 /* ---------- Rateio de conta ---------- */
 
-/** Rateio sem número de parcelas: repete todo mês até ser encerrado. */
+/** Rateio ou serviço mensal sem número de parcelas: repete todo mês até ser encerrado. */
 export function isOpenEnded(r: Pick<Receivable, 'kind' | 'recurring'>): boolean {
-  return r.kind === 'rateio' && r.recurring === true
+  return (r.kind === 'rateio' || r.kind === 'servico') && r.recurring === true
 }
+
+/** Cobrança por mês (valor mensal): todo rateio e os serviços cadastrados a partir da v1.21. Os serviços antigos são valor total parcelado. */
+export function isMonthly(r: Pick<Receivable, 'kind' | 'monthlyCents'>): boolean {
+  return r.kind === 'rateio' || (r.kind === 'servico' && r.monthlyCents !== undefined)
+}
+
+/** Serviço de valor variável com o valor do mês ainda por informar. */
+export function amountPending(r: Pick<Receivable, 'valueType'>, i: Installment): boolean {
+  return r.valueType === 'variable' && i.amountSet !== true && i.paidAt === null
+}
+
+/** Como se chama cada mês: "parte" no rateio, "mensalidade" no serviço mensal. */
+const monthWord = (r: Pick<Receivable, 'kind'>) => (r.kind === 'rateio' ? 'parte' : 'mensalidade')
+const capital = (w: string) => w[0].toUpperCase() + w.slice(1)
 
 /**
  * Parcelas do rateio: `monthlyCents` a cada mês, a partir de `startMonth`, no dia de vencimento da conta ligada.
@@ -144,9 +159,9 @@ export function extendRecurring(r: Receivable, until: Competence): Receivable {
   }
 }
 
-/** Rótulo de uma parcela: "Parcela 3 de 10" ou, no rateio sem fim, "Parte de nov/2026". */
+/** Rótulo de uma parcela: "Parcela 3 de 10" ou, sem fim, "Parte de nov/2026" (rateio) e "Mensalidade de nov/2026" (serviço). */
 export function parcelLabel(r: Receivable, i: Installment): string {
-  return isOpenEnded(r) ? `Parte de ${formatCompetenceShort(competenceOf(i.dueDate))}` : `Parcela ${i.number} de ${r.installmentCount}`
+  return isOpenEnded(r) ? `${capital(monthWord(r))} de ${formatCompetenceShort(competenceOf(i.dueDate))}` : `Parcela ${i.number} de ${r.installmentCount}`
 }
 
 /** "3/10" no parcelado; "nov/2026" no rateio sem fim; vazio em compra de uma parcela só. */
@@ -159,7 +174,7 @@ export function parcelShort(r: Receivable, i: Installment): string {
 function pieces(r: Receivable, installments: Installment[]): string {
   if (isOpenEnded(r)) {
     const months = installments.map((i) => formatCompetenceShort(competenceOf(i.dueDate)))
-    return `${months.length === 1 ? 'parte' : 'partes'} de ${joinWords(months)}`
+    return `${months.length === 1 ? monthWord(r) : `${monthWord(r)}s`} de ${joinWords(months)}`
   }
   const nums = installments.map((i) => i.number)
   return `${nums.length === 1 ? 'parcela' : 'parcelas'} ${joinNumbers(nums)} de ${r.installmentCount}`
@@ -213,10 +228,26 @@ export interface ReceivableEdit {
   firstDueDate: IsoDate
   notes: string
   billId?: string | null
-  /** Rateio: valor por mês, sem fim e mês de encerramento. */
+  /** Rateio e serviço mensal: valor por mês, sem fim e mês de encerramento. */
   monthlyCents?: number
   recurring?: boolean
   endMonth?: Competence | null
+  /** Serviço mensal: fixo ou variável. */
+  valueType?: ValueType
+}
+
+/**
+ * Ao refazer as parcelas de uma cobrança mensal, mantém de cada mês o que já foi registrado: a baixa (com o valor
+ * da época) e, no serviço variável, o valor informado.
+ */
+function keepRecorded(fresh: Installment[], old: Installment[]): Installment[] {
+  return fresh.map((f) => {
+    const o = old.find((i) => i.number === f.number)
+    if (!o) return f
+    // Mês já recebido fica com o valor da época: mudar o valor mensal vale daqui para a frente.
+    if (o.paidAt !== null) return { ...f, amountCents: o.amountCents, ...(o.amountSet ? { amountSet: true } : {}), paidAt: o.paidAt, paidAmountCents: o.paidAmountCents }
+    return o.amountSet ? { ...f, amountCents: o.amountCents, amountSet: true } : f
+  })
 }
 
 /**
@@ -225,28 +256,23 @@ export interface ReceivableEdit {
  * da parcela (quem chama garante que o novo número de parcelas não é menor que a última parcela com baixa).
  */
 export function editReceivable(r: Receivable, edit: ReceivableEdit): Receivable {
-  if (edit.kind === 'rateio' && edit.recurring) {
+  const monthlyKind = edit.kind === 'rateio' || edit.kind === 'servico'
+  if (monthlyKind && edit.recurring) {
     // Sem fim: grava só os meses já gerados; os seguintes o app completa ao ler.
     const day = Number(edit.firstDueDate.slice(8, 10))
     const monthly = edit.monthlyCents ?? 0
     const until = r.installments.length ? competenceOf(r.installments[r.installments.length - 1].dueDate) : competenceOf(edit.firstDueDate)
     const base = { ...r, ...edit, monthlyCents: monthly, endMonth: edit.endMonth ?? null, recurring: true }
     const fresh = buildRateio(monthly, competenceOf(edit.firstDueDate), day, { until, endMonth: edit.endMonth ?? null })
-    const kept = fresh.map((f) => {
-      const old = r.installments.find((i) => i.number === f.number)
-      return old && old.paidAt !== null ? { ...f, paidAt: old.paidAt, paidAmountCents: old.paidAmountCents } : f
-    })
+    const kept = keepRecorded(fresh, r.installments)
     return { ...base, installments: kept, installmentCount: kept.length, totalCents: kept.reduce((a, i) => a + i.amountCents, 0) }
   }
-  if (edit.kind === 'rateio' && edit.monthlyCents !== undefined) {
-    // Rateio com parcelas: o valor é por mês, e o total é valor × parcelas.
+  if (monthlyKind && edit.monthlyCents !== undefined) {
+    // Rateio ou serviço mensal com parcelas: o valor é por mês, e o total é a soma dos meses.
     const day = Number(edit.firstDueDate.slice(8, 10))
     const fresh = buildRateio(edit.monthlyCents, competenceOf(edit.firstDueDate), day, { count: edit.installmentCount })
-    const kept = fresh.map((f) => {
-      const old = r.installments.find((i) => i.number === f.number)
-      return old && old.paidAt !== null ? { ...f, paidAt: old.paidAt, paidAmountCents: old.paidAmountCents } : f
-    })
-    return { ...r, ...edit, recurring: false, endMonth: null, installments: kept, totalCents: edit.monthlyCents * edit.installmentCount }
+    const kept = keepRecorded(fresh, r.installments)
+    return { ...r, ...edit, recurring: false, endMonth: null, installments: kept, totalCents: kept.reduce((a, i) => a + i.amountCents, 0) }
   }
   const sameSchedule =
     edit.totalCents === r.totalCents &&
@@ -618,7 +644,7 @@ export function chargeMessage(person: Person, receivables: Receivable[], today: 
     if (overdue.length === 1) {
       const { receivable: r, installments } = overdue[0]
       const oldest = installments[0].dueDate
-      const word = isOpenEnded(r) ? 'Parte' : 'Parcela'
+      const word = isOpenEnded(r) ? capital(monthWord(r)) : 'Parcela'
       if (installments.length === 1) {
         return {
           kind: 'overdue',
@@ -659,7 +685,7 @@ export function chargeMessage(person: Person, receivables: Receivable[], today: 
     const i = installments[0]
     return {
       kind: 'reminder',
-      subject: `Lembrete de ${isOpenEnded(r) ? 'parte' : 'parcela'}: ${r.description}`,
+      subject: `Lembrete de ${isOpenEnded(r) ? monthWord(r) : 'parcela'}: ${r.description}`,
       totalCents: total,
       text: `${hello} ${tone.remind} da ${pieces(r, [i])} ${ref(r)}, de ${formatBRL(total)}, ${tone.due} ${formatDateBR(i.dueDate)}. ${tone.thanks}`,
     }

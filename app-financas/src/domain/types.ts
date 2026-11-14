@@ -89,6 +89,8 @@ export interface Installment {
   amountCents: number
   paidAt: IsoDate | null
   paidAmountCents: number | null
+  /** Serviço de valor variável: o valor deste mês já foi informado (antes disso, vale o previsto). */
+  amountSet?: boolean
 }
 
 /**
@@ -121,4 +123,9 @@ export interface Receivable {
   monthlyCents?: number
   /** Último mês do rateio sem fim, quando ele for encerrado. */
   endMonth?: Competence | null
+  /**
+   * Serviço prestado mensal (v1.21): valor fixo ou variável. No variável, `monthlyCents` é o previsto e cada mês
+   * recebe o valor real em "Informar valor" (veja `Installment.amountSet`). Ausente = fixo.
+   */
+  valueType?: ValueType
 }
