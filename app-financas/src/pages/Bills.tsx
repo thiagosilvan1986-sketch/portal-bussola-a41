@@ -66,7 +66,7 @@ export default function Bills() {
               return (
                 <li
                   key={b.id}
-                  className={b.active ? "row-card" : "row-card archived"}
+                  className={b.active ? "row-card row-pay" : "row-card row-pay archived"}
                 >
                   <Link className="row-main" to={`/contas/${b.id}`}>
                     <span className="row-title">{b.name}</span>
@@ -89,7 +89,7 @@ export default function Bills() {
                     )}
                   </Link>
                   <div className="row-side">
-                    <strong>{money(b.expectedAmountCents)}</strong>
+                    <strong className="pay-amount">− {money(b.expectedAmountCents)}</strong>
                     <span className="muted">
                       {b.valueType === "fixed" ? "fixo" : "estimado"}
                     </span>

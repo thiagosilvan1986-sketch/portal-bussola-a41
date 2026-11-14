@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultRegistry } from '../domain/registry'
 import { buildEntry } from '../domain/bills'
@@ -175,6 +177,22 @@ describe('Início', () => {
       expect(t).toContain('▼ Saldo do mês')
       expect(t).toContain('R$ 729,90')
       expect(t).toContain('Falta: sai mais do que entra')
+    })
+
+    it('saída em vermelho com "−" e entrada em verde com "+", qualquer que seja a situação', () => {
+      renderHome()
+      const row = (name: string) => screen.getByText(name).closest('li')!
+      for (const name of ['Condomínio', 'Energia', 'Internet']) {
+        // Condomínio está paga, Energia atrasada, Internet pendente: todas são saída
+        expect(row(name).className).toContain('row-pay')
+        expect(row(name).querySelector('.pay-amount')!.textContent).toMatch(/^− R\$/)
+      }
+      const recv = row('Ana Souza · Tênis 2/3')
+      expect(recv.className).toContain('row-recv')
+      expect(recv.querySelector('.recv-amount')!.textContent).toMatch(/^\+ R\$/)
+      const css = readFileSync(resolve(__dirname, '../styles.css'), 'utf8')
+      expect(css).toMatch(/\.row-card\.row-pay\[class\*='status-'\] \{\s*border-left-color: var\(--pay\)/)
+      expect(css).toMatch(/--pay: #d6413a/)
     })
 
     it('A receber mostra só as parcelas, com resumo próprio; a escolha fica guardada', () => {

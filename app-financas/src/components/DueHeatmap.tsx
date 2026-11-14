@@ -64,7 +64,10 @@ export function DueHeatmap({ days, tone, multiMonth = false, onOpen }: Props) {
             {multiMonth && <span className="muted">{shortDate(i.dueDate)} · </span>}
             {i.name}
           </span>
-          <strong>{money(i.cents)}</strong>
+          <strong className={tone === 'pagar' ? 'pay-amount' : 'recv-amount'}>
+            {tone === 'pagar' ? '− ' : '+ '}
+            {money(i.cents)}
+          </strong>
         </span>
         <span className="heat-item-sub">
           <span className={`chip ${p.cls} status-chip`}>

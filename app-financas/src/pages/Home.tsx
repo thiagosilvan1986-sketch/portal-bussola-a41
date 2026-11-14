@@ -107,7 +107,7 @@ export default function Home() {
     const e = m.entry
     const toInform = m.pending && amountDue(e) === 0
     return (
-      <li key={m.key} className={`row-card status-${m.status}`}>
+      <li key={m.key} className={`row-card row-pay status-${m.status}`}>
         <button className="row-main" onClick={() => setSelectedKey(m.key)}>
           <span className="row-title">{e.billName}</span>
           <span className="muted">
@@ -117,7 +117,7 @@ export default function Home() {
           <StatusChip status={m.status} />
         </button>
         <div className="row-side">
-          {toInform ? <span className="muted">Valor a informar</span> : <strong>{money(m.shownCents)}</strong>}
+          {toInform ? <span className="muted">Valor a informar</span> : <strong className="pay-amount">− {money(m.shownCents)}</strong>}
           {m.pending && !toInform && (
             <button
               className="check-btn labeled"

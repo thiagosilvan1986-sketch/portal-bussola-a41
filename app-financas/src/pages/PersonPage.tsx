@@ -540,7 +540,7 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
   }
 
   return (
-    <li className={`row-card parcel status-${status}`}>
+    <li className={`row-card row-recv parcel status-${status}`}>
       <div className="row-main">
         <span className="row-title">
           {isOpenEnded(receivable) ? (
@@ -564,7 +564,7 @@ function Parcel({ uid, today, receivable, installment: i }: { uid: string; today
         )}
       </div>
       <div className="row-side">
-        <strong>{money(settled ? (i.paidAmountCents ?? 0) : installmentRemaining(i))}</strong>
+        <strong className="recv-amount">+ {money(settled ? (i.paidAmountCents ?? 0) : installmentRemaining(i))}</strong>
         {i.paidAt !== null && !settled && <span className="muted">restante</span>}
         <div className="parcel-actions">
           {i.paidAt !== null && (

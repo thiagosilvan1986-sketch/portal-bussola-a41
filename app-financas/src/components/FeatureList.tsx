@@ -102,8 +102,8 @@ export const FEATURES: { icon: string; title: string; text: string; version: str
   {
     icon: 'M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7zm4 10a2 2 0 0 0 4 0',
     title: 'Tudo à vista, logo na entrada',
-    version: '1.20',
-    text: 'Atrasos e vencimentos de hoje te recebem aqui, antes de virarem problema. A Início mostra toda a movimentação do mês, o que você paga e o que recebe, com o saldo do mês e filtros por tipo, situação e categoria.',
+    version: '1.23',
+    text: 'Atrasos e vencimentos de hoje te recebem aqui, antes de virarem problema. A Início mostra toda a movimentação do mês, o que você paga e o que recebe, com o saldo do mês e filtros por tipo, situação e categoria. Saída aparece em vermelho (− R$) e entrada em verde (+ R$), em todo o app.',
   },
 ]
 

@@ -325,9 +325,9 @@ describe('Relatórios', () => {
     // o dia tocado mostra as contas dele, com a data (o período tem 3 meses)
     const items = within(map).getByRole('list', { name: 'Vencimentos do dia 10' })
     expect(within(items).getAllByRole('listitem').map((li) => flat(li.textContent))).toEqual([
-      '10/10 · AluguelR$ 1.000,00✓ PagaVer detalhes ›',
-      '10/11 · AluguelR$ 1.000,00⚠ AtrasadaVer detalhes ›',
-      '10/12 · AluguelR$ 1.000,00○ PrevistaVer detalhes ›',
+      '10/10 · Aluguel− R$ 1.000,00✓ PagaVer detalhes ›',
+      '10/11 · Aluguel− R$ 1.000,00⚠ AtrasadaVer detalhes ›',
+      '10/12 · Aluguel− R$ 1.000,00○ PrevistaVer detalhes ›',
     ])
     // lista: Detalhado (padrão) traz conta por conta; Consolidado, um total por dia
     const list = map.querySelector('.heat-list') as HTMLElement

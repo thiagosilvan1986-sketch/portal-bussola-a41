@@ -168,7 +168,7 @@ export default function Receivables() {
               const overdue = summary.overdueCount > 0
               const done = summary.purchaseCount > 0 && summary.remainingCents === 0
               return (
-                <li key={person.id} className={`row-card ${overdue ? 'status-atrasada' : done ? 'status-paga' : ''}`}>
+                <li key={person.id} className={`row-card row-recv ${overdue ? 'status-atrasada' : done ? 'status-paga' : ''}`}>
                   <Link className="row-main" to={`/receber/pessoa/${person.id}`}>
                     <span className="row-title">{person.name}</span>
                     <span className="muted">
@@ -203,7 +203,7 @@ export default function Receivables() {
                   {summary.purchaseCount > 0 && (
                     <div className="row-side person-totals">
                       {/* Quanto foi da pessoa no período: o total, o que já entrou e o que falta. */}
-                      <strong aria-label={`Total ${horizonPhrase(horizon)}: ${money(summary.receivedCents + summary.remainingCents)}`}>
+                      <strong className="recv-amount" aria-label={`Total ${horizonPhrase(horizon)}: ${money(summary.receivedCents + summary.remainingCents)}`}>
                         {money(summary.receivedCents + summary.remainingCents)}
                       </strong>
                       <span className="muted">

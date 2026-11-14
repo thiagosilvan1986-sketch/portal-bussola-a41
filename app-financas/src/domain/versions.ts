@@ -28,6 +28,7 @@ export const VERSIONS: readonly { version: string; date: IsoDate; summary: strin
   { version: '1.20', date: '2026-11-13', summary: 'Início com tudo o que entra e sai, cadastro rápido de categoria e forma, Mês | Ano | Tudo em A receber e listas em ordem alfabética' },
   { version: '1.21', date: '2026-11-13', summary: 'Serviço prestado por mês: valor fixo ou variável, sem fim ou com parcelas' },
   { version: '1.22', date: '2026-11-13', summary: 'Listas que se ajustam a qualquer tamanho de letra, sem cortar palavras, e A receber com total, recebido e falta de cada pessoa' },
+  { version: '1.23', date: '2026-11-14', summary: 'Saída em vermelho e entrada em verde em todo o app' },
 ]
 
 export const CURRENT_VERSION = VERSIONS[VERSIONS.length - 1]

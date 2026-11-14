@@ -19,9 +19,10 @@
   --orange-bg: #ffedd5;
   --orange-text: #9a3412;
   /* Dinheiro que sai (A pagar) e que entra (A receber): par validado para daltonismo, separado dos status. */
-  --pay: #2a78d6;
-  --pay-bg: #e3eefb;
-  --pay-text: #1c5aa8;
+  /* A pagar é saída: vermelho. A receber é entrada: verde. */
+  --pay: #d6413a;
+  --pay-bg: #fde8e7;
+  --pay-text: #b4231c;
   --recv: #14a06d;
   --recv-bg: #dff5ec;
   --recv-text: #0b6b4a;
@@ -51,9 +52,9 @@
     --neutral-bg: #26324a;
     --orange-bg: #4a2a12;
     --orange-text: #fdba74;
-    --pay: #3987e5;
-    --pay-bg: #1b2f52;
-    --pay-text: #9cc3f5;
+    --pay: #e5534b;
+    --pay-bg: #4a1f1d;
+    --pay-text: #f8a39c;
     --recv: #199e70;
     --recv-bg: #143a30;
     --recv-text: #7fdcb7;
@@ -1703,11 +1704,11 @@ td.balance-neg {
   --cat-5: #eda100;
   --cat-other: #7b8598;
   /* Mapa de vencimentos: 5 níveis de uma cor só, do mais claro ao mais escuro; o texto muda para manter o contraste. */
-  --heat-pay-1: #b7d3f6;
-  --heat-pay-2: #86b6ef;
-  --heat-pay-3: #3987e5;
-  --heat-pay-4: #1c5cab;
-  --heat-pay-5: #0d366b;
+  --heat-pay-1: #fbd3cf;
+  --heat-pay-2: #f5a59c;
+  --heat-pay-3: #e8665b;
+  --heat-pay-4: #b9302a;
+  --heat-pay-5: #7a1914;
   --heat-pay-t1: #0f172a;
   --heat-pay-t2: #0f172a;
   --heat-pay-t3: #0f172a;
@@ -1733,11 +1734,11 @@ td.balance-neg {
     --cat-5: #c98500;
     --cat-other: #7f8aa0;
     /* No escuro, mais dinheiro = mais claro: o zero some no fundo e o maior valor brilha. */
-    --heat-pay-1: #1d3a66;
-    --heat-pay-2: #245192;
-    --heat-pay-3: #3987e5;
-    --heat-pay-4: #86b6ef;
-    --heat-pay-5: #cde2fb;
+    --heat-pay-1: #4a1f1d;
+    --heat-pay-2: #73302b;
+    --heat-pay-3: #d0493f;
+    --heat-pay-4: #f19189;
+    --heat-pay-5: #fcd4d0;
     --heat-pay-t1: #e8edf6;
     --heat-pay-t2: #e8edf6;
     --heat-pay-t3: #0f172a;
@@ -2488,14 +2489,23 @@ button.heat-item:focus-visible {
 .home-filters > label:only-child {
   grid-column: 1 / -1;
 }
-.row-card.row-recv {
-  border-left-color: var(--ok-text);
+/* A faixa lateral e o valor dizem o sentido do dinheiro: saída em vermelho, entrada em verde.
+   A situação (paga, atrasada, prevista…) fica na etiqueta, com ícone e texto. */
+.row-card.row-pay,
+.row-card.row-pay[class*='status-'] {
+  border-left-color: var(--pay);
 }
-.row-card.row-recv.status-atrasada {
-  border-left-color: var(--danger);
+.row-card.row-recv,
+.row-card.row-recv[class*='status-'] {
+  border-left-color: var(--recv);
 }
-.recv-amount {
-  color: var(--ok-text);
+.pay-amount,
+.row-card .row-side > strong.pay-amount {
+  color: var(--pay-text);
+}
+.recv-amount,
+.row-card .row-side > strong.recv-amount {
+  color: var(--recv-text);
 }
 
 /* Botões do título da tela (Nova conta, Nova compra…) não quebram em duas linhas. */
