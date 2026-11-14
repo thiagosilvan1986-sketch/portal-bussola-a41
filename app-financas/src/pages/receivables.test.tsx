@@ -962,3 +962,26 @@ describe('Serviço prestado mensal (v1.21)', () => {
     expect(saved.installments[1]).toMatchObject({ amountCents: 41250, amountSet: true })
   })
 })
+
+describe('A receber: quanto foi de cada pessoa', () => {
+  it('cada pessoa mostra o total do período, o recebido e o que falta', () => {
+    window.localStorage.clear()
+    setData([ana], [tenis()])
+    renderAt('/receber')
+    fireEvent.click(screen.getByRole('button', { name: 'Tudo' }))
+    const row = screen.getByRole('link', { name: /Ana Souza/ }).closest('li')!
+    const side = row.querySelector('.person-totals')!
+    expect(flat(side.querySelector('strong')!.textContent)).toBe('R$ 420,00')
+    expect(flat(side.querySelector('.muted')!.textContent)).toBe('Recebido R$ 42,00 · Falta R$ 378,00')
+  })
+
+  it('quitado no período: mostra quanto entrou, com falta zerada', () => {
+    window.localStorage.clear()
+    const pago = { ...tenis(), installments: tenis().installments.map((i) => ({ ...i, paidAt: '2026-11-01', paidAmountCents: i.amountCents })) }
+    setData([ana], [pago])
+    renderAt('/receber')
+    fireEvent.click(screen.getByRole('button', { name: 'Tudo' }))
+    const side = screen.getByRole('link', { name: /Ana Souza/ }).closest('li')!.querySelector('.person-totals')!
+    expect(flat(side.textContent)).toContain('Recebido R$ 420,00 · Falta R$ 0,00')
+  })
+})

@@ -24,8 +24,8 @@ export const FEATURES: { icon: string; title: string; text: string; version: str
   {
     icon: 'M12 4v11m0 0-4-4m4 4 4-4M5 20h14',
     title: 'Quem te deve, na ponta do lápis',
-    version: '1.21',
-    text: 'Reembolsos do cartão, serviços prestados e rateios de conta, parcela a parcela, com a previsão do que volta a cada mês. No rateio, a parte da pessoa numa conta dividida (aluguel, energia) é cobrada todo mês, sem fim até você encerrar, ou pelo número de parcelas que informar. O serviço prestado também é por mês, com valor fixo ou variável (você informa o valor de cada mês antes de cobrar). O resumo mostra o que falta no Mês, no Ano ou em Tudo.',
+    version: '1.22',
+    text: 'Reembolsos do cartão, serviços prestados e rateios de conta, parcela a parcela, com a previsão do que volta a cada mês. No rateio, a parte da pessoa numa conta dividida (aluguel, energia) é cobrada todo mês, sem fim até você encerrar, ou pelo número de parcelas que informar. O serviço prestado também é por mês, com valor fixo ou variável (você informa o valor de cada mês antes de cobrar). O resumo e cada pessoa mostram o total, o recebido e o que falta no Mês, no Ano ou em Tudo.',
   },
   {
     icon: 'M12 3v18M5 7h14M5 7l-3 7a3 3 0 0 0 6 0L5 7zm14 0-3 7a3 3 0 0 0 6 0l-3-7z',

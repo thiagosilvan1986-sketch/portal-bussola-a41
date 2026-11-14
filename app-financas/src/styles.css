@@ -2504,3 +2504,14 @@ button.heat-item:focus-visible {
   white-space: nowrap;
   flex: none;
 }
+
+/* A receber: total da pessoa no período, com recebido e falta embaixo (alinhados à direita). */
+.person-totals > .muted {
+  text-align: right;
+  font-size: 0.85rem;
+}
+
+/* Mantém junto o que não pode se separar (rótulo e valor, "nov/2026"). */
+.nowrap {
+  white-space: nowrap;
+}

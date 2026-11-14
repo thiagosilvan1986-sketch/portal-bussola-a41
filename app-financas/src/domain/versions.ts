@@ -27,7 +27,7 @@ export const VERSIONS: readonly { version: string; date: IsoDate; summary: strin
   { version: '1.19', date: '2026-11-13', summary: 'Rosquinha das categorias: nome, valor e % no centro ao passar o mouse' },
   { version: '1.20', date: '2026-11-13', summary: 'Início com tudo o que entra e sai, cadastro rápido de categoria e forma, Mês | Ano | Tudo em A receber e listas em ordem alfabética' },
   { version: '1.21', date: '2026-11-13', summary: 'Serviço prestado por mês: valor fixo ou variável, sem fim ou com parcelas' },
-  { version: '1.22', date: '2026-11-13', summary: 'Listas que se ajustam a qualquer tamanho de letra, sem cortar palavras' },
+  { version: '1.22', date: '2026-11-13', summary: 'Listas que se ajustam a qualquer tamanho de letra, sem cortar palavras, e A receber com total, recebido e falta de cada pessoa' },
 ]
 
 export const CURRENT_VERSION = VERSIONS[VERSIONS.length - 1]

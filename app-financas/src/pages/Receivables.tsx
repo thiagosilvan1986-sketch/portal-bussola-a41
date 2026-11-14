@@ -201,9 +201,15 @@ export default function Receivables() {
                     )}
                   </Link>
                   {summary.purchaseCount > 0 && (
-                    <div className="row-side">
-                      <strong>{money(summary.remainingCents)}</strong>
-                      <span className="muted">falta {horizonPhrase(horizon)}</span>
+                    <div className="row-side person-totals">
+                      {/* Quanto foi da pessoa no período: o total, o que já entrou e o que falta. */}
+                      <strong aria-label={`Total ${horizonPhrase(horizon)}: ${money(summary.receivedCents + summary.remainingCents)}`}>
+                        {money(summary.receivedCents + summary.remainingCents)}
+                      </strong>
+                      <span className="muted">
+                        <span className="nowrap">Recebido {money(summary.receivedCents)}</span> ·{' '}
+                        <span className="nowrap">Falta {money(summary.remainingCents)}</span>
+                      </span>
                     </div>
                   )}
                 </li>
